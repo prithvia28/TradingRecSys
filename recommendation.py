@@ -1,60 +1,142 @@
 # recommendation.py
-from analysis import calculate_rsi, calculate_sma, calculate_ema, calculate_macd, calculate_bollinger_bands
-from risk_management import risk_management
+import pandas as pd
 
-def generate_recommendation(data):
+def generate_recommendation(indicators):
     """
     Generate a recommendation based on technical analysis indicators and risk management metrics.
-    :param data: Stock data with technical indicators like RSI, SMA, MACD, etc.
-    :return: Buy, Sell, or Hold recommendation
+    :param indicators: Dictionary containing technical indicators and risk metrics
+    :return: Buy, Sell, or Hold recommendation with explanation
     """
-    rsi = data['RSI'].iloc[-1] if 'RSI' in data else None
-    sma_50 = data['SMA 50'].iloc[-1] if 'SMA 50' in data else None
-    sma_200 = data['SMA 200'].iloc[-1] if 'SMA 200' in data else None
-    ema_50 = data['EMA 50'].iloc[-1] if 'EMA 50' in data else None
-    macd = data['MACD']['MACD'].iloc[-1] if 'MACD' in data else None
-    macd_signal = data['MACD']['MACDs'].iloc[-1] if 'MACD' in data else None
-
-    # Risk management values
-    volatility = data['volatility'] if 'volatility' in data else None
-    max_drawdown = data['max_drawdown'] if 'max_drawdown' in data else None
-    position_size = data['position_size'] if 'position_size' in data else None
-
-    recommendation = "Hold"  # Default recommendation
-
-    # Technical Analysis Conditions
-    if rsi is not None:
-        if rsi < 30:
-            recommendation = "Buy"
-        elif rsi > 70:
-            recommendation = "Sell"
-    
-    if sma_50 is not None and sma_200 is not None:
-        if sma_50 > sma_200:
-            recommendation = "Buy"
-        elif sma_50 < sma_200:
-            recommendation = "Sell"
-    
-    if ema_50 is not None and sma_50 is not None:
-        if ema_50 > sma_50:
-            recommendation = "Buy"
-        elif ema_50 < sma_50:
-            recommendation = "Sell"
-    
-    if macd is not None and macd_signal is not None:
-        if macd > macd_signal:
-            recommendation = "Buy"
-        elif macd < macd_signal:
-            recommendation = "Sell"
-
-    # Risk Management Conditions
-    if volatility is not None and volatility > 0.02:  # If volatility is too high, hold the position
+    try:
+        # Initialize with default recommendation
         recommendation = "Hold"
-
-    if max_drawdown is not None and max_drawdown < -0.2:  # If max drawdown exceeds 20%, avoid the position
-        recommendation = "Hold"
-
-    if position_size is not None and position_size > 0.1:  # If position size is too high (e.g., 10% of portfolio)
-        recommendation = "Hold"  # Suggest holding if position size is too large relative to account size
-
-    return recommendation
+        reasons = []
+        
+        # Extract indicator values if they exist and are not None
+        # RSI check
+        if ('RSI' in indicators and indicators['RSI'] is not None and 
+            not (hasattr(indicators['RSI'], 'empty') and indicators['RSI'].empty)):
+            try:
+                rsi = indicators['RSI'].iloc[-1]
+                if not pd.isna(rsi) and isinstance(rsi, (int, float)):
+                    if rsi < 30:
+                        recommendation = "Buy"
+                        reasons.append(f"RSI is oversold ({rsi:.2f} < 30)")
+                    elif rsi > 70:
+                        recommendation = "Sell"
+                        reasons.append(f"RSI is overbought ({rsi:.2f} > 70)")
+            except Exception as e:
+                print(f"RSI evaluation error: {str(e)}")
+        
+        # Moving average checks - SMA 50/200 for golden/death cross
+        if ('SMA 50' in indicators and 'SMA 200' in indicators and 
+            indicators['SMA 50'] is not None and indicators['SMA 200'] is not None and
+            not (hasattr(indicators['SMA 50'], 'empty') and indicators['SMA 50'].empty) and 
+            not (hasattr(indicators['SMA 200'], 'empty') and indicators['SMA 200'].empty)):
+            
+            try:
+                sma_50_last = indicators['SMA 50'].iloc[-1] if not pd.isna(indicators['SMA 50'].iloc[-1]) else None
+                sma_200_last = indicators['SMA 200'].iloc[-1] if not pd.isna(indicators['SMA 200'].iloc[-1]) else None
+                
+                if sma_50_last is not None and sma_200_last is not None:
+                    if sma_50_last > sma_200_last:
+                        if recommendation != "Sell":  # Don't override a stronger sell signal
+                            recommendation = "Buy"
+                        reasons.append(f"Golden Cross: SMA 50 ({sma_50_last:.2f}) > SMA 200 ({sma_200_last:.2f})")
+                    elif sma_50_last < sma_200_last:
+                        if recommendation != "Buy":  # Don't override a stronger buy signal
+                            recommendation = "Sell"
+                        reasons.append(f"Death Cross: SMA 50 ({sma_50_last:.2f}) < SMA 200 ({sma_200_last:.2f})")
+            except Exception as e:
+                print(f"SMA evaluation error: {str(e)}")
+        
+        # EMA 50 vs SMA 50 check
+        if ('EMA 50' in indicators and 'SMA 50' in indicators and 
+            indicators['EMA 50'] is not None and indicators['SMA 50'] is not None and
+            not (hasattr(indicators['EMA 50'], 'empty') and indicators['EMA 50'].empty) and 
+            not (hasattr(indicators['SMA 50'], 'empty') and indicators['SMA 50'].empty)):
+            
+            try:
+                ema_50_last = indicators['EMA 50'].iloc[-1] if not pd.isna(indicators['EMA 50'].iloc[-1]) else None
+                sma_50_last = indicators['SMA 50'].iloc[-1] if not pd.isna(indicators['SMA 50'].iloc[-1]) else None
+                
+                if ema_50_last is not None and sma_50_last is not None:
+                    if ema_50_last > sma_50_last:
+                        if recommendation != "Sell":
+                            recommendation = "Buy"
+                        reasons.append(f"EMA 50 ({ema_50_last:.2f}) > SMA 50 ({sma_50_last:.2f})")
+                    elif ema_50_last < sma_50_last:
+                        if recommendation != "Buy":
+                            recommendation = "Sell"
+                        reasons.append(f"EMA 50 ({ema_50_last:.2f}) < SMA 50 ({sma_50_last:.2f})")
+            except Exception as e:
+                print(f"EMA evaluation error: {str(e)}")
+        
+        # MACD check
+        if ('MACD' in indicators and indicators['MACD'] is not None and 
+            not (hasattr(indicators['MACD'], 'empty') and indicators['MACD'].empty)):
+            try:
+                macd_df = indicators['MACD']
+                
+                # Check both possible column naming conventions
+                macd_col = None
+                signal_col = None
+                
+                if 'MACD_12_26_9' in macd_df.columns:
+                    macd_col = 'MACD_12_26_9'
+                elif 'MACD' in macd_df.columns:
+                    macd_col = 'MACD'
+                
+                if 'MACDs_12_26_9' in macd_df.columns:
+                    signal_col = 'MACDs_12_26_9'
+                elif 'MACDs' in macd_df.columns:
+                    signal_col = 'MACDs'
+                    
+                if macd_col and signal_col:
+                    macd_val = macd_df[macd_col].iloc[-1] if not pd.isna(macd_df[macd_col].iloc[-1]) else None
+                    macd_signal = macd_df[signal_col].iloc[-1] if not pd.isna(macd_df[signal_col].iloc[-1]) else None
+                    
+                    if macd_val is not None and macd_signal is not None:
+                        if macd_val > macd_signal:
+                            if recommendation != "Sell":
+                                recommendation = "Buy"
+                            reasons.append(f"MACD ({macd_val:.4f}) > Signal ({macd_signal:.4f})")
+                        elif macd_val < macd_signal:
+                            if recommendation != "Buy":
+                                recommendation = "Sell"
+                            reasons.append(f"MACD ({macd_val:.4f}) < Signal ({macd_signal:.4f})")
+            except Exception as e:
+                print(f"MACD evaluation error: {str(e)}")
+        
+        # Risk management considerations (if present in indicators)
+        volatility = indicators.get('volatility')
+        max_drawdown = indicators.get('max_drawdown')
+        
+        if volatility is not None and isinstance(volatility, (int, float)) and volatility > 0.25:  # High volatility
+            if recommendation == "Buy":
+                recommendation = "Hold"
+                reasons.append(f"High volatility ({volatility:.2%}) suggests caution")
+        
+        if max_drawdown is not None and isinstance(max_drawdown, (int, float)) and max_drawdown < -0.2:  # Significant drawdown
+            if recommendation == "Buy":
+                recommendation = "Hold"
+                reasons.append(f"Significant drawdown ({max_drawdown:.2%}) suggests caution")
+        
+        # If no specific signals were found
+        if not reasons:
+            reasons.append("Technical indicators are neutral")
+        
+        # Combine recommendation with reasons
+        recommendation_with_reasons = {
+            "action": recommendation,
+            "reasons": reasons
+        }
+        
+        return recommendation_with_reasons
+        
+    except Exception as e:
+        print(f"Error generating recommendation: {str(e)}")
+        return {
+            "action": "Hold",
+            "reasons": ["Error in recommendation generation"]
+        }

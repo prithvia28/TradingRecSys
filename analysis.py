@@ -1,87 +1,109 @@
 # analysis.py
 import pandas as pd
 import pandas_ta as ta
+import numpy as np
 
 def calculate_rsi(data, period=14):
     """
-    Calculate the Relative Strength Index (RSI) using pandas_ta.
+    Calculate Relative Strength Index (RSI) using pandas_ta.
     :param data: Stock data (pandas DataFrame) containing 'Close' prices.
     :param period: Period for RSI calculation (default is 14).
     :return: pandas Series with RSI values.
     """
-    rsi = ta.rsi(data['Close'], length=period)
-    if rsi is not None and not rsi.empty:
-        return rsi.dropna()  # Drop NaN values
-    return None  # Return None if RSI couldn't be calculated
+    try:
+        rsi = ta.rsi(data['Close'], length=period)
+        return rsi
+    except Exception as e:
+        print(f"Error calculating RSI: {str(e)}")
+        return pd.Series(np.nan, index=data.index)
 
 def calculate_sma(data, period=50):
     """
-    Calculate the Simple Moving Average (SMA) using pandas_ta.
+    Calculate Simple Moving Average (SMA) using pandas_ta.
     :param data: Stock data (pandas DataFrame) containing 'Close' prices.
     :param period: Period for SMA calculation (default is 50).
     :return: pandas Series with SMA values.
     """
-    sma = ta.sma(data['Close'], length=period)
-    if sma is not None and not sma.empty:
-        return sma.dropna()  # Drop NaN values
-    return None  # Return None if SMA couldn't be calculated
+    try:
+        sma = ta.sma(data['Close'], length=period)
+        return sma
+    except Exception as e:
+        print(f"Error calculating SMA: {str(e)}")
+        return pd.Series(np.nan, index=data.index)
 
 def calculate_ema(data, period=50):
     """
-    Calculate the Exponential Moving Average (EMA) using pandas_ta.
+    Calculate Exponential Moving Average (EMA) using pandas_ta.
     :param data: Stock data (pandas DataFrame) containing 'Close' prices.
     :param period: Period for EMA calculation (default is 50).
     :return: pandas Series with EMA values.
     """
-    ema = ta.ema(data['Close'], length=period)
-    if ema is not None and not ema.empty:
-        return ema.dropna()  # Drop NaN values
-    return None  # Return None if EMA couldn't be calculated
+    try:
+        ema = ta.ema(data['Close'], length=period)
+        return ema
+    except Exception as e:
+        print(f"Error calculating EMA: {str(e)}")
+        return pd.Series(np.nan, index=data.index)
 
 def calculate_macd(data):
     """
-    Calculate the Moving Average Convergence Divergence (MACD) using pandas_ta.
+    Calculate MACD (Moving Average Convergence Divergence) using pandas_ta.
     :param data: Stock data (pandas DataFrame) containing 'Close' prices.
-    :return: pandas DataFrame with MACD and Signal line values.
+    :return: pandas DataFrame with MACD line and Signal line.
     """
-    macd = ta.macd(data['Close'])
-    if macd is not None and not macd.empty:
-        return macd.dropna()  # Drop NaN values
-    return None  # Return None if MACD couldn't be calculated
+    try:
+        macd = ta.macd(data['Close'])
+        return macd
+    except Exception as e:
+        print(f"Error calculating MACD: {str(e)}")
+        return pd.DataFrame(index=data.index)
 
 def calculate_bollinger_bands(data, period=20):
     """
     Calculate Bollinger Bands using pandas_ta.
     :param data: Stock data (pandas DataFrame) containing 'Close' prices.
     :param period: Period for Bollinger Bands calculation (default is 20).
-    :return: pandas DataFrame with upper and lower bands, as well as the middle band (SMA).
+    :return: pandas DataFrame with upper and lower bands.
     """
-    bbands = ta.bbands(data['Close'], length=period)
-    if bbands is not None and not bbands.empty:
-        return bbands.dropna()  # Drop NaN values
-    return None  # Return None if Bollinger Bands couldn't be calculated
+    try:
+        bollinger = ta.bbands(data['Close'], length=period)
+        return bollinger
+    except Exception as e:
+        print(f"Error calculating Bollinger Bands: {str(e)}")
+        return pd.DataFrame(index=data.index)
+
+def calculate_sma_200(data):
+    """
+    Calculate SMA 200 for golden cross/death cross signals.
+    :param data: Stock data (pandas DataFrame) containing 'Close' prices.
+    :return: pandas Series with SMA 200 values.
+    """
+    try:
+        sma_200 = ta.sma(data['Close'], length=200)
+        return sma_200
+    except Exception as e:
+        print(f"Error calculating SMA 200: {str(e)}")
+        return pd.Series(np.nan, index=data.index)
 
 def calculate_all_indicators(data):
     """
-    Calculate all important technical analysis indicators.
+    Calculate all the indicators needed for stock analysis.
     :param data: Stock data (pandas DataFrame) containing 'Close' prices.
-    :return: A dictionary with all calculated indicators (RSI, SMA, EMA, MACD, Bollinger Bands).
+    :return: Dictionary with all indicators calculated.
     """
+    if data is None or data.empty:
+        return {}
+        
     indicators = {}
-
-    # Calculate RSI (14-period by default)
     indicators['RSI'] = calculate_rsi(data)
-
-    # Calculate SMA (50-period by default)
-    indicators['SMA 50'] = calculate_sma(data, period=50)
-
-    # Calculate EMA (50-period by default)
-    indicators['EMA 50'] = calculate_ema(data, period=50)
-
-    # Calculate MACD
+    indicators['SMA 50'] = calculate_sma(data, 50)
+    indicators['SMA 200'] = calculate_sma_200(data)
+    indicators['EMA 50'] = calculate_ema(data, 50)
     indicators['MACD'] = calculate_macd(data)
-
-    # Calculate Bollinger Bands (20-period by default)
-    indicators['Bollinger Bands'] = calculate_bollinger_bands(data, period=20)
-
+    indicators['Bollinger Bands'] = calculate_bollinger_bands(data)
+    
+    # Add returns calculation for risk management
+    if 'Returns' not in data.columns:
+        data['Returns'] = data['Close'].pct_change()
+    
     return indicators

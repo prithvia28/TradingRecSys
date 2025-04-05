@@ -1,6 +1,5 @@
 # market_data.py
 import yfinance as yf
-from forex_python.converter import CurrencyRates
 import pandas as pd
 
 def get_stock_data(symbols=["AAPL"], period="1y", interval="1d"):
@@ -14,11 +13,14 @@ def get_stock_data(symbols=["AAPL"], period="1y", interval="1d"):
     stock_data_dict = {}
 
     for symbol in symbols:
-        stock_data = yf.download(symbol, period=period, interval=interval)
-        if stock_data is not None and not stock_data.empty:
-            stock_data_dict[symbol] = stock_data
-        else:
-            print(f"Warning: No data available for {symbol}")
+        try:
+            stock_data = yf.download(symbol, period=period, interval=interval)
+            if stock_data is not None and not stock_data.empty:
+                stock_data_dict[symbol] = stock_data
+            else:
+                print(f"Warning: No data found for {symbol}")
+        except Exception as e:
+            print(f"Error fetching data for {symbol}: {str(e)}")
     
     return stock_data_dict
 
@@ -28,20 +30,19 @@ def get_real_time_price(symbol="AAPL"):
     :param symbol: Stock symbol (e.g., "AAPL")
     :return: Current price of the stock
     """
-    stock = yf.Ticker(symbol)
-    current_price = stock.history(period="1d")["Close"].iloc[0]  # Last closing price for today
-    return current_price
-
-def get_currency_exchange_rate(from_currency="USD", to_currency="EUR"):
-    """
-    Fetch real-time currency exchange rate.
-    :param from_currency: The currency to convert from (e.g., "USD")
-    :param to_currency: The currency to convert to (e.g., "EUR")
-    :return: Current exchange rate
-    """
-    currency_rate = CurrencyRates()
-    rate = currency_rate.get_rate(from_currency, to_currency)
-    return rate
+    try:
+        stock = yf.Ticker(symbol)
+        # Get the most recent closing price - using last available data
+        todays_data = stock.history(period="1d")
+        if not todays_data.empty:
+            current_price = todays_data["Close"].iloc[-1]  # Get the last available closing price
+            return current_price
+        else:
+            print(f"Warning: No price data available for {symbol}")
+            return None
+    except Exception as e:
+        print(f"Error fetching real-time price for {symbol}: {str(e)}")
+        return None
 
 def get_market_data(symbols=["AAPL"], period="1y", interval="1d"):
     """
@@ -57,21 +58,24 @@ def get_market_data(symbols=["AAPL"], period="1y", interval="1d"):
     stock_data_dict = get_stock_data(symbols, period, interval)
 
     for symbol, stock_data in stock_data_dict.items():
-        # Calculate price trends (High, Low, Open, Close)
-        high_price = stock_data['High'].max()
-        low_price = stock_data['Low'].min()
-        average_price = stock_data['Close'].mean()
+        try:
+            # Calculate price trends (High, Low, Open, Close)
+            high_price = stock_data['High'].max()
+            low_price = stock_data['Low'].min()
+            average_price = stock_data['Close'].mean()
 
-        # Get real-time price
-        real_time_price = get_real_time_price(symbol)
+            # Get real-time price
+            real_time_price = get_real_time_price(symbol)
 
-        # Add stock data and trends to dictionary
-        market_data[symbol] = {
-            "stock_data": stock_data.tail(5),  # Latest 5 rows of data
-            "high_price": high_price,
-            "low_price": low_price,
-            "average_price": average_price,
-            "real_time_price": real_time_price
-        }
-
+            # Add stock data and trends to dictionary
+            market_data[symbol] = {
+                "stock_data": stock_data,  # Keep all data for calculations
+                "high_price": high_price,
+                "low_price": low_price,
+                "average_price": average_price,
+                "real_time_price": real_time_price
+            }
+        except Exception as e:
+            print(f"Error processing market data for {symbol}: {str(e)}")
+    
     return market_data
