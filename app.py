@@ -15,22 +15,45 @@ from recommendation import generate_recommendation
 from risk_management import risk_management
 from news_updates import display_news_blocks
 
+# Import functions from your db.py file
+from db import (
+    get_portfolio,
+    create_portfolio,
+    update_portfolio,
+    load_portfolio_from_mongo,
+    save_portfolio_to_mongo
+)
+
 # Page configuration
 st.set_page_config(layout="wide", page_title="Trading Recommendation System")
 
-# Create a two-column layout with portfolio on the right
-col_main, col_portfolio = st.columns([3, 1])
+# Create a three-column layout for the main content area
+col_main, col_news = st.columns([2, 1])
+
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = "default_user"  # Use a default user for demo
 
 # Initialize session state for portfolio if it doesn't exist
 if 'portfolio' not in st.session_state:
-    st.session_state.portfolio = {
-        'AAPL': {'shares': 10, 'avg_price': 170.50, 'value': 0},
-        'MSFT': {'shares': 5, 'avg_price': 325.20, 'value': 0},
-        'GOOG': {'shares': 3, 'avg_price': 145.75, 'value': 0}
-    }
+    # Try to load from MongoDB
+    mongo_portfolio = load_portfolio_from_mongo(st.session_state.user_id)
+    
+    if mongo_portfolio:
+        # Convert MongoDB portfolio format to session state format
+        portfolio_dict = {}
+        for stock in mongo_portfolio:
+            portfolio_dict[stock['symbol']] = {
+                'shares': stock['shares'],
+                'avg_price': stock['avg_price'],
+                'value': 0  # Will be updated later
+            }
+        st.session_state.portfolio = portfolio_dict
+    else:
+        # If no portfolio found in MongoDB, create one
+        create_portfolio(st.session_state.user_id)
+        st.session_state.portfolio = {}
 
-
-# Define portfolio management functions
+# Define portfolio value update function
 def update_portfolio_values():
     """Update portfolio values with current market prices"""
     total_value = 0
@@ -43,7 +66,7 @@ def update_portfolio_values():
             details['profit_loss_pct'] = (current_price / details['avg_price'] - 1) * 100
             total_value += details['value']
         except Exception as e:
-            st.sidebar.error(f"Error updating {symbol}: {str(e)}")
+            st.error(f"Error updating {symbol}: {str(e)}")
             details['current_price'] = 0
             details['value'] = 0
             details['profit_loss'] = 0
@@ -175,7 +198,7 @@ with col_main:
                         st.error(traceback.format_exc())
 
 
-                    with col_portfolio:
+                    with col_news:
                         st.write(f"📰 Latest News for {symbol}")
                         display_news_blocks(symbol)
 
@@ -583,40 +606,86 @@ with col_main:
         except Exception as e:
             st.error(f"An error occurred during analysis: {str(e)}")
 
-# Portfolio panel on the right side
-with col_portfolio:
-    st.sidebar.title("📈 Portfolio")
-    
-    # Update portfolio values
-    total_value = update_portfolio_values()
-    
-    # Display total portfolio value
-    st.sidebar.metric("Total Portfolio Value", f"${total_value:.2f}")
-    
-    # Display individual stocks in portfolio
-    st.sidebar.markdown("### Holdings")
-    
-    for symbol, details in st.session_state.portfolio.items():
-        if details['shares'] > 0:  # Only show stocks with shares
-            with st.sidebar.expander(f"{symbol} - {details['shares']} shares"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"Avg Price: ${details['avg_price']:.2f}")
-                with col2:
-                    if 'current_price' in details and details['current_price'] > 0:
-                        st.write(f"Current: ${details['current_price']:.2f}")
+# Portfolio panel in the sidebar
+st.sidebar.header("📈 Portfolio")
+
+# Update portfolio values
+total_value = update_portfolio_values()
+
+# Display total portfolio value
+st.sidebar.metric("Total Portfolio Value", f"${total_value:.2f}")
+
+# Add stock form
+with st.sidebar.expander("Add Stock"):
+    with st.form("add_stock_form"):
+        new_symbol = st.text_input("Symbol").upper()
+        new_shares = st.number_input("Shares", min_value=0.01, step=0.01)
+        new_price = st.number_input("Average Price", min_value=0.01, step=0.01)
+        
+        submit = st.form_submit_button("Add to Portfolio")
+        if submit and new_symbol and new_shares > 0 and new_price > 0:
+            # Use update_portfolio from db.py to update MongoDB
+            update_portfolio(st.session_state.user_id, new_symbol, new_shares, new_price, "buy")
+            
+            # Also update session state for immediate display
+            if new_symbol in st.session_state.portfolio:
+                # Update existing position
+                current = st.session_state.portfolio[new_symbol]
+                total_shares = current['shares'] + new_shares
+                total_cost = (current['shares'] * current['avg_price']) + (new_shares * new_price)
+                new_avg_price = total_cost / total_shares
                 
-                # Show profit/loss
-                if 'profit_loss' in details:
-                    profit_text = f"P/L: ${details['profit_loss']:.2f} ({details['profit_loss_pct']:.2f}%)"
-                    if details['profit_loss'] > 0:
-                        st.success(profit_text)
-                    elif details['profit_loss'] < 0:
-                        st.error(profit_text)
-                    else:
-                        st.info(profit_text)
-                
-                # Value
-                st.write(f"Value: ${details['value']:.2f}")
-    
-    
+                st.session_state.portfolio[new_symbol]['shares'] = total_shares
+                st.session_state.portfolio[new_symbol]['avg_price'] = new_avg_price
+            else:
+                # Add new position
+                st.session_state.portfolio[new_symbol] = {
+                    'shares': new_shares,
+                    'avg_price': new_price,
+                    'value': 0
+                }
+            
+            st.rerun()
+
+# Display individual stocks in portfolio
+st.sidebar.markdown("### Holdings")
+
+if len(st.session_state.portfolio) == 0:
+    st.sidebar.info("No stocks in portfolio. Add some stocks to get started!")
+
+for symbol, details in st.session_state.portfolio.items():
+    if details['shares'] > 0:  # Only show stocks with shares
+        with st.sidebar.expander(f"{symbol} - {details['shares']} shares"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"Avg Price: ${details['avg_price']:.2f}")
+            with col2:
+                if 'current_price' in details and details['current_price'] > 0:
+                    st.write(f"Current: ${details['current_price']:.2f}")
+            
+            # Show profit/loss
+            if 'profit_loss' in details:
+                profit_text = f"P/L: ${details['profit_loss']:.2f} ({details['profit_loss_pct']:.2f}%)"
+                if details['profit_loss'] > 0:
+                    st.success(profit_text)
+                elif details['profit_loss'] < 0:
+                    st.error(profit_text)
+                else:
+                    st.info(profit_text)
+            
+            # Value
+            st.write(f"Value: ${details['value']:.2f}")
+            
+            # Add sell button
+            sell_shares = st.number_input(f"Sell {symbol} shares", min_value=0.01, max_value=float(details['shares']), step=0.01, key=f"sell_{symbol}")
+            if st.button(f"Sell {symbol}", key=f"sell_button_{symbol}"):
+                if sell_shares > 0:
+                    # Use update_portfolio from db.py to update MongoDB
+                    update_portfolio(st.session_state.user_id, symbol, sell_shares, details['current_price'], "sell")
+                    
+                    # Also update session state for immediate display
+                    st.session_state.portfolio[symbol]['shares'] -= sell_shares
+                    if st.session_state.portfolio[symbol]['shares'] <= 0:
+                        del st.session_state.portfolio[symbol]
+                    
+                    st.rerun()
