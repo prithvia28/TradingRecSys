@@ -101,12 +101,8 @@ with col_main:
     
     # Create a dropdown with the ability to select multiple stocks
     available_stocks = ["AAPL", "MSFT", "GOOG", "AMZN", "TSLA", "NFLX", "META", "NVDA", "AMD", "INTC", "PYPL", "DIS", "BA", "JPM", "V", "MA"]
-    symbols = st.multiselect("Select Stock Symbols", available_stocks, default=["AAPL", "MSFT"])
+    symbols = st.multiselect("Select Stock Symbols", available_stocks, default=["AAPL"])
     
-    # Allow user to add custom symbols
-    custom_symbol = st.text_input("Add Custom Symbol", "")
-    if st.button("Add Symbol") and custom_symbol:
-        symbols.append(custom_symbol.upper())
     
     # Select the period for data
     col1, col2 = st.columns(2)
@@ -139,6 +135,9 @@ with col_main:
                     
                     # Add charts before tabs for better visibility
                     try:
+                        # Calculate indicators first - this is important to have indicators ready for charts
+                        indicators = calculate_all_indicators(data['stock_data'])
+                        
                         # Create price chart
                         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                                             vertical_spacing=0.03, 
@@ -158,31 +157,34 @@ with col_main:
                             row=1, col=1
                         )
                         
-                        # Calculate indicators
-                        indicators = calculate_all_indicators(data['stock_data'])
-                        
                         # Add MA lines if available
                         if 'SMA 50' in indicators and indicators['SMA 50'] is not None:
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=indicators['SMA 50'].index,
-                                    y=indicators['SMA 50'].values,
-                                    line=dict(color='blue', width=1.5),
-                                    name="SMA 50"
-                                ),
-                                row=1, col=1
-                            )
+                            # Make sure index dates match the stock data
+                            valid_data = indicators['SMA 50'].dropna()
+                            if not valid_data.empty:
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=valid_data.index,
+                                        y=valid_data.values,
+                                        line=dict(color='blue', width=1.5),
+                                        name="SMA 50"
+                                    ),
+                                    row=1, col=1
+                                )
                         
                         if 'SMA 200' in indicators and indicators['SMA 200'] is not None:
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=indicators['SMA 200'].index,
-                                    y=indicators['SMA 200'].values,
-                                    line=dict(color='red', width=1.5),
-                                    name="SMA 200"
-                                ),
-                                row=1, col=1
-                            )
+                            # Make sure index dates match the stock data
+                            valid_data = indicators['SMA 200'].dropna()
+                            if not valid_data.empty:
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=valid_data.index,
+                                        y=valid_data.values,
+                                        line=dict(color='red', width=1.5),
+                                        name="SMA 200"
+                                    ),
+                                    row=1, col=1
+                                )
                         
                         # Add volume bar chart
                         fig.add_trace(
@@ -204,35 +206,137 @@ with col_main:
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
                         )
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        # Set y-axes titles
+                        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+                        fig.update_yaxes(title_text="Volume", row=2, col=1)
+                        
+                        # st.plotly_chart(fig, use_container_width=True)
                         
                     except Exception as e:
                         st.error(f"Error creating charts for {symbol}: {str(e)}")
+                        import traceback
+                        st.error(traceback.format_exc())
 
                     # Display stock data in a tab
                     tabs = st.tabs(["Price Data", "Technical Analysis", "Risk Metrics", "Recommendation"])
                     
+
                     with tabs[0]:  # Price Data tab
-                        st.write("### Latest Price Data")
-                        st.dataframe(data['stock_data'].tail())
+                        st.write("### Price Data Summary")
                         
-                        st.write("### Price Overview")
+                        # Calculate proper trading days based on interval
+                        if interval in ["1d", "1wk", "1mo"]:
+                            # When using daily or longer intervals, each row is a trading day
+                            trading_days = len(data['stock_data'])
+                        else:
+                            # For intraday data (minutes/hours), count unique dates
+                            unique_dates = np.unique(data['stock_data'].index.date)
+                            trading_days = len(unique_dates)
+                        
+                        # Calculate summary statistics for the entire period
+                        try:
+                            period_summary = {
+                                'Period Start': data['stock_data'].index.min().strftime('%Y-%m-%d'),
+                                'Period End': data['stock_data'].index.max().strftime('%Y-%m-%d'),
+                                'Trading Days': trading_days,
+                                'Open (First Day)': float(data['stock_data'].iloc[0]['Open']),
+                                'Close (Last Day)': float(data['stock_data'].iloc[-1]['Close']),
+                                'Period High': float(data['stock_data']['High'].max()),
+                                'Period Low': float(data['stock_data']['Low'].min()),
+                                'Average Price': float(data['stock_data']['Close'].mean()),
+                                'Total Volume': int(data['stock_data']['Volume'].sum()),
+                                'Price Change': float(data['stock_data'].iloc[-1]['Close'] - data['stock_data'].iloc[0]['Open']),
+                            }
+                            
+                            # Calculate percentage change
+                            period_summary['Price Change %'] = (period_summary['Price Change'] / period_summary['Open (First Day)']) * 100
+                            
+                            # Display summary in a visually appealing way
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.metric("Period", f"{period_summary['Period Start']} to {period_summary['Period End']}")
+                                st.metric("Trading Days", f"{period_summary['Trading Days']}")
+                                st.metric("Open (First Day)", f"${period_summary['Open (First Day)']:.2f}")
+                                st.metric("Close (Last Day)", f"${period_summary['Close (Last Day)']:.2f}")
+                                st.metric("Total Volume", f"{period_summary['Total Volume']:,.0f}")
+                            
+                            with col2:
+                                st.metric("Period High", f"${period_summary['Period High']:.2f}")
+                                st.metric("Period Low", f"${period_summary['Period Low']:.2f}")
+                                st.metric("Average Price", f"${period_summary['Average Price']:.2f}")
+                                
+                                # Display price change with colored indicators
+                                delta_color = "normal"
+                                if period_summary['Price Change'] > 0:
+                                    delta_color = "off"  # Green for positive
+                                elif period_summary['Price Change'] < 0:
+                                    delta_color = "inverse"  # Red for negative
+                                    
+                                st.metric(
+                                    "Price Change", 
+                                    f"${period_summary['Price Change']:.2f}", 
+                                    f"{period_summary['Price Change %']:.2f}%",
+                                    delta_color=delta_color
+                                )
+                            
+                            # Create a summary DataFrame for display - fixing the formatting issue
+                            summary_data = {
+                                'Metric': ['Period Start', 'Period End', 'Trading Days', 'Open (First Day)', 
+                                        'Close (Last Day)', 'Period High', 'Period Low', 
+                                        'Average Price', 'Total Volume', 'Price Change', 'Price Change %'],
+                                'Value': [
+                                    period_summary['Period Start'],
+                                    period_summary['Period End'],
+                                    str(period_summary['Trading Days']),
+                                    f"${period_summary['Open (First Day)']:.2f}",
+                                    f"${period_summary['Close (Last Day)']:.2f}",
+                                    f"${period_summary['Period High']:.2f}",
+                                    f"${period_summary['Period Low']:.2f}",
+                                    f"${period_summary['Average Price']:.2f}",
+                                    f"{period_summary['Total Volume']:,.0f}",
+                                    f"${period_summary['Price Change']:.2f}",
+                                    f"{period_summary['Price Change %']:.2f}%"
+                                ]
+                            }
+                            
+                            summary_df = pd.DataFrame(summary_data)
+                            
+                            st.write("### Period Summary Statistics")
+                            st.dataframe(summary_df, hide_index=True)
+                            
+                            # Show raw data in expandable section
+                            with st.expander("Show Raw Price Data"):
+                                st.write("#### Complete Period Data")
+                                st.dataframe(data['stock_data'])
+                                
+                                st.write("#### Recent Price Data (Last 5 rows)")
+                                st.dataframe(data['stock_data'].tail())
+                        
+                        except Exception as e:
+                            st.error(f"Error calculating period summary: {str(e)}")
+                            st.error(f"Error details: {type(e).__name__}")
+                            import traceback
+                            st.error(traceback.format_exc())
+                        
+                        # Update the Price Overview section to use period data instead of just latest data
+                        st.write("### Latest Price Overview")
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
-                            if 'high_price' in data and isinstance(data['high_price'], (int, float)):
-                                st.metric("High", f"${data['high_price']:.2f}")
+                            if 'Period High' in period_summary and isinstance(period_summary['Period High'], (int, float)):
+                                st.metric("Period High", f"${period_summary['Period High']:.2f}")
                             else:
-                                st.metric("High", "N/A")
+                                st.metric("Period High", "N/A")
                         with col2:
-                            if 'low_price' in data and isinstance(data['low_price'], (int, float)):
-                                st.metric("Low", f"${data['low_price']:.2f}")
+                            if 'Period Low' in period_summary and isinstance(period_summary['Period Low'], (int, float)):
+                                st.metric("Period Low", f"${period_summary['Period Low']:.2f}")
                             else:
-                                st.metric("Low", "N/A")
+                                st.metric("Period Low", "N/A")
                         with col3:
-                            if 'average_price' in data and isinstance(data['average_price'], (int, float)):
-                                st.metric("Average", f"${data['average_price']:.2f}")
+                            if 'Average Price' in period_summary and isinstance(period_summary['Average Price'], (int, float)):
+                                st.metric("Period Average", f"${period_summary['Average Price']:.2f}")
                             else:
-                                st.metric("Average", "N/A")
+                                st.metric("Period Average", "N/A")
                         with col4:
                             if 'real_time_price' in data and data['real_time_price'] is not None and isinstance(data['real_time_price'], (int, float)):
                                 st.metric("Latest Price", f"${data['real_time_price']:.2f}")
@@ -558,22 +662,4 @@ with col_portfolio:
                 # Value
                 st.write(f"Value: ${details['value']:.2f}")
     
-    # Add watchlist section
-    st.sidebar.markdown("### Watchlist")
     
-    # Allow adding to watchlist
-    new_watch = st.sidebar.text_input("Add symbol to watchlist")
-    if st.sidebar.button("Add to Watchlist") and new_watch:
-        if new_watch.upper() not in st.session_state.watchlist:
-            st.session_state.watchlist.append(new_watch.upper())
-            st.sidebar.success(f"Added {new_watch.upper()} to watchlist!")
-    
-    # Display watchlist
-    for watch_symbol in st.session_state.watchlist:
-        cols = st.sidebar.columns([3, 1])
-        with cols[0]:
-            st.write(f"• {watch_symbol}")
-        with cols[1]:
-            if st.button("Remove", key=f"remove_{watch_symbol}"):
-                st.session_state.watchlist.remove(watch_symbol)
-                st.experimental_rerun()
