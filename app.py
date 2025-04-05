@@ -7,11 +7,13 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import yfinance as yf
 
+
 # Import custom modules
 from market_data import get_market_data, get_stock_data
 from analysis import calculate_all_indicators
 from recommendation import generate_recommendation
 from risk_management import risk_management
+from news_updates import display_news_blocks
 
 # Page configuration
 st.set_page_config(layout="wide", page_title="Trading Recommendation System")
@@ -26,7 +28,6 @@ if 'portfolio' not in st.session_state:
         'MSFT': {'shares': 5, 'avg_price': 325.20, 'value': 0},
         'GOOG': {'shares': 3, 'avg_price': 145.75, 'value': 0}
     }
-
 
 
 # Define portfolio management functions
@@ -50,6 +51,7 @@ def update_portfolio_values():
     
     return total_value
 
+# Portfolio management function
 def manage_portfolio(symbol, recommendation_action, current_price=None):
     """
     Adjust portfolio based on trading recommendations.
@@ -119,6 +121,7 @@ with col_main:
             with st.spinner("Fetching market data..."):
                 # Fetch market data for selected stocks
                 market_data = get_market_data(symbols, period, interval)
+                
 
             if not market_data:
                 st.error("Failed to fetch market data. Please check the stock symbols and try again.")
@@ -215,6 +218,11 @@ with col_main:
                         st.error(f"Error creating charts for {symbol}: {str(e)}")
                         import traceback
                         st.error(traceback.format_exc())
+
+
+                    with col_portfolio:
+                        st.write(f"📰 Latest News for {symbol}")
+                        display_news_blocks(symbol)
 
                     # Display stock data in a tab
                     tabs = st.tabs(["Price Data", "Technical Analysis", "Risk Metrics", "Recommendation"])
