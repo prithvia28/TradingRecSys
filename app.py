@@ -50,51 +50,6 @@ def update_portfolio_values():
     
     return total_value
 
-# Portfolio management function
-def manage_portfolio(symbol, recommendation_action, current_price=None):
-    """
-    Adjust portfolio based on trading recommendations.
-    :param symbol: Stock symbol to trade
-    :param recommendation_action: Buy/Sell recommendation
-    :param current_price: Current price of the stock
-    """
-    try:
-        # Use current price if provided, otherwise get from yfinance
-        if current_price is None:
-            current_price = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
-            
-        # Initialize the symbol in portfolio if it doesn't exist
-        if symbol not in st.session_state.portfolio:
-            st.session_state.portfolio[symbol] = {
-                'shares': 0,
-                'avg_price': current_price,
-                'value': 0,
-                'profit_loss': 0,
-                'profit_loss_pct': 0
-            }
-            
-        portfolio_item = st.session_state.portfolio[symbol]
-        
-        # Make trading decisions
-        if recommendation_action == "Buy":
-            new_shares = 10  # Buy 10 shares
-            portfolio_item['shares'] += new_shares
-            # Update average price
-            total_cost = (portfolio_item['avg_price'] * (portfolio_item['shares'] - new_shares)) + (current_price * new_shares)
-            portfolio_item['avg_price'] = total_cost / portfolio_item['shares'] if portfolio_item['shares'] > 0 else current_price
-            
-        elif recommendation_action == "Sell" and portfolio_item['shares'] >= 5:
-            portfolio_item['shares'] -= 5  # Sell 5 shares
-            
-        # Update values
-        portfolio_item['current_price'] = current_price
-        portfolio_item['value'] = portfolio_item['shares'] * current_price
-        portfolio_item['profit_loss'] = (current_price - portfolio_item['avg_price']) * portfolio_item['shares']
-        portfolio_item['profit_loss_pct'] = (current_price / portfolio_item['avg_price'] - 1) * 100 if portfolio_item['avg_price'] > 0 else 0
-        
-    except Exception as e:
-        st.error(f"Portfolio management error: {str(e)}")
-
 # Main content area
 with col_main:
     st.title("🚀 Trading Recommendation System")
