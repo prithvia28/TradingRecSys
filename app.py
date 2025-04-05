@@ -27,8 +27,7 @@ if 'portfolio' not in st.session_state:
         'GOOG': {'shares': 3, 'avg_price': 145.75, 'value': 0}
     }
 
-if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = ["AMZN", "NVDA", "META", "TSLA"]
+
 
 # Define portfolio management functions
 def update_portfolio_values():
