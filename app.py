@@ -101,7 +101,7 @@ with col_main:
     st.title("🚀 Trading Recommendation System")
     
     # Create a dropdown with the ability to select multiple stocks
-    available_stocks = ["AAPL", "MSFT", "GOOG", "AMZN", "TSLA", "NFLX", "META", "NVDA", "AMD", "INTC", "PYPL", "DIS", "BA", "JPM", "V", "MA"]
+    available_stocks = ["AAPL", "MSFT", "GOOG", "AMZN", "TSLA", "NFLX", "META", "NVDA", "AMD", "INTC", "PYPL", "DIS", "BA", "JPM", "V", "MA","FORD"]
     symbols = st.multiselect("Select Stock Symbols", available_stocks, default=["AAPL"])
     
     
@@ -243,18 +243,18 @@ with col_main:
                         # Calculate summary statistics for the entire period
                         try:
                             period_summary = {
-                                'Period Start': data['stock_data'].index.min().strftime('%Y-%m-%d'),
-                                'Period End': data['stock_data'].index.max().strftime('%Y-%m-%d'),
-                                'Trading Days': trading_days,
-                                'Open (First Day)': float(data['stock_data'].iloc[0]['Open']),
-                                'Close (Last Day)': float(data['stock_data'].iloc[-1]['Close']),
-                                'Period High': float(data['stock_data']['High'].max()),
-                                'Period Low': float(data['stock_data']['Low'].min()),
-                                'Average Price': float(data['stock_data']['Close'].mean()),
-                                'Total Volume': int(data['stock_data']['Volume'].sum()),
-                                'Price Change': float(data['stock_data'].iloc[-1]['Close'] - data['stock_data'].iloc[0]['Open']),
-                            }
-                            
+                            'Period Start': data['stock_data'].index.min().strftime('%Y-%m-%d'),
+                            'Period End': data['stock_data'].index.max().strftime('%Y-%m-%d'),
+                            'Trading Days': trading_days,
+                            'Open (First Day)': float(data['stock_data'].iloc[0]['Open'].iloc[0]),  
+                            'Close (Last Day)': float(data['stock_data'].iloc[-1]['Close'].iloc[0]),  
+                            'Period High': float(data['stock_data']['High'].max().iloc[0]),  
+                            'Period Low': float(data['stock_data']['Low'].min().iloc[0]),  
+                            'Average Price': float(data['stock_data']['Close'].mean().iloc[0]),  
+                            'Total Volume': int(data['stock_data']['Volume'].sum().iloc[0]),  
+                            'Price Change': float((data['stock_data'].iloc[-1]['Close'].iloc[0] - data['stock_data'].iloc[0]['Open'].iloc[0])),
+                        }
+                                        
                             # Calculate percentage change
                             period_summary['Price Change %'] = (period_summary['Price Change'] / period_summary['Open (First Day)']) * 100
                             
@@ -284,7 +284,7 @@ with col_main:
                                     "Price Change", 
                                     f"${period_summary['Price Change']:.2f}", 
                                     f"{period_summary['Price Change %']:.2f}%",
-                                    delta_color=delta_color
+                                    delta_color="normal"
                                 )
                             
                             # Create a summary DataFrame for display - fixing the formatting issue
@@ -579,11 +579,14 @@ with col_main:
                     
                     # Generate and display recommendation
                     with tabs[3]:
+                        
                         st.write("### Trading Recommendation")
                         
                         try:
-                            # Generate recommendation based on indicators and risk
-                            recommendation_result = generate_recommendation(indicators)
+                            # Generate recommendation based on indicators, risk, and AI analysis
+                            # Pass in the symbol and price data for OpenAI enhancement
+                            price_data = data.get('historical_data') if 'historical_data' in data else None
+                            recommendation_result = generate_recommendation(indicators, symbol, price_data)
                             recommendation = recommendation_result.get('action', 'Hold')
                             
                             # Display recommendation with visual cue
@@ -594,35 +597,27 @@ with col_main:
                             else:
                                 st.info(f"**Recommendation: HOLD {symbol}**")
                             
-                            # Show reasoning
-                            st.write("#### Reasoning:")
-                            reasons = recommendation_result.get('reasons', ['No specific reasons provided'])
-                            for reason in reasons:
+                            # Display confidence score if available
+                            if 'confidence_score' in recommendation_result and recommendation_result['confidence_score'] is not None:
+                                confidence = recommendation_result['confidence_score']
+                                st.write(f"**Confidence Score:** {confidence:.2f}")
+                                # Visual confidence meter
+                                st.progress(confidence)
+                            
+                            # Technical analysis reasoning
+                            st.write("#### Technical Analysis:")
+                            tech_reasons = recommendation_result.get('technical_analysis', recommendation_result.get('reasons', ['No technical analysis provided']))
+                            for reason in tech_reasons:
                                 st.write(f"- {reason}")
                             
-                            # Actions section
-                            st.write("#### Actions:")
-                            col1, col2, col3 = st.columns(3)
+                            # AI insights section
+                            if 'ai_insights' in recommendation_result:
+                                st.write("#### AI Insights:")
+                                ai_insights = recommendation_result['ai_insights']
+                                for insight in ai_insights:
+                                    st.write(f"- {insight}")
                             
-                            with col1:
-                                if st.button(f"Follow Recommendation for {symbol}", key=f"follow_{symbol}"):
-                                    # Current price for portfolio updates
-                                    current_price = data['real_time_price'] if 'real_time_price' in data else None
-                                    # Update portfolio based on recommendation
-                                    manage_portfolio(symbol, recommendation, current_price)
-                                    st.success(f"Portfolio updated according to {recommendation} recommendation!")
                             
-                            with col2:
-                                if st.button(f"Buy {symbol}", key=f"buy_{symbol}"):
-                                    current_price = data['real_time_price'] if 'real_time_price' in data else None
-                                    manage_portfolio(symbol, "Buy", current_price)
-                                    st.success(f"Added 10 shares of {symbol} to portfolio!")
-                            
-                            with col3:
-                                if st.button(f"Sell {symbol}", key=f"sell_{symbol}"):
-                                    current_price = data['real_time_price'] if 'real_time_price' in data else None
-                                    manage_portfolio(symbol, "Sell", current_price)
-                                    st.success(f"Sold 5 shares of {symbol} from portfolio!")
                             
                         except Exception as e:
                             st.error(f"Error generating recommendation for {symbol}: {str(e)}")
