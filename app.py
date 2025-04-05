@@ -64,7 +64,7 @@ try:
             st.write(f"Value at Risk (VaR): {risk_metrics['VaR']}")
             st.write(f"Position Size: {risk_metrics['position_size']}")
 
-            # Generate recommendation based on indicators and risk
+            # Generate recommendation based on indicators and riskgit pul
             recommendation = generate_recommendation(indicators)
             st.write(f"Recommendation: {recommendation}")
 
