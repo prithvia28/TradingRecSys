@@ -1,6 +1,6 @@
 # 📈 FinnXperts - Multi-Agent Stock Recommendation System
 
-**TradingRecSys** is an intelligent, multi-agent stock recommendation system that uses a goal-driven architecture to analyze, recommend, and manage trades with a focus on execution quality and risk management.
+**FinnXperts** is an intelligent, multi-agent stock recommendation system that uses a goal-driven architecture to analyze, recommend, and manage trades with a focus on execution quality and risk management.
 
 Built with ❤️ using Python, Streamlit, and a modular agent-based design, this app is ideal for both educational and experimental financial AI applications.
 
