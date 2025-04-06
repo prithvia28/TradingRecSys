@@ -14,7 +14,8 @@ Built with ❤️ using Python, Streamlit, and a modular agent-based design, thi
 - 🤖 **Autonomous Execution Decisions**
 - 🔁 **Feedback Loop Between risk management and execution agent**
 - 🌐 **Streamlit Web Interface**
--    **Display news for selected stock**
+- :newspaper:	  **Display news for selected stock**
+- :robot: **Chatbot integration for better understandiung for financial terms and working.**
 
 ---
 
