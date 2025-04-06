@@ -293,7 +293,7 @@ def generate_gemini_recommendation(symbol, price_data, indicators, tech_recommen
         Technical reasons: {', '.join(tech_recommendation['reasons'])}
         
         Based on this data, provide:
-        1. A recommendation (Buy, Sell, or Hold)
+        1. Give a straightforward recommendation (Buy, Sell, or Hold)
         2. 2-3 key insights about this asset based on the data
         3. A confidence score between 0 (low confidence) and 1 (high confidence)
         

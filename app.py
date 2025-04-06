@@ -14,69 +14,35 @@ from recommendation import generate_recommendation
 from risk_management import risk_management
 from news_updates import display_news_blocks
 
-# Import functions from your db.py file
-from db import (
-    get_portfolio,
-    create_portfolio,
-    update_portfolio,
-    load_portfolio_from_mongo,
-    save_portfolio_to_mongo
+# Import agents
+from agents import (
+    AgentCommunicationBus, 
+    MarketDataAgent, 
+    TechnicalAnalysisAgent, 
+    RiskManagementAgent, 
+    ExecutionAgent
 )
 
+# Initialize agents
+bus = AgentCommunicationBus()
+market_data_agent = MarketDataAgent(bus)
+tech_agent = TechnicalAnalysisAgent(bus)
+execution_agent = ExecutionAgent(bus)
+risk_agent = RiskManagementAgent(bus)
+
+
+
 # Page configuration
-st.set_page_config(layout="wide", page_title="Trading Recommendation System")
+st.set_page_config(layout="wide", page_title="FinnXperts")
 
 # Create a three-column layout for the main content area
 col_main, col_news = st.columns([2, 1])
 
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = "default_user"  # Use a default user for demo
-
-# Initialize session state for portfolio if it doesn't exist
-if 'portfolio' not in st.session_state:
-    # Try to load from MongoDB
-    mongo_portfolio = load_portfolio_from_mongo(st.session_state.user_id)
-    
-    if mongo_portfolio:
-        # Convert MongoDB portfolio format to session state format
-        portfolio_dict = {}
-        for stock in mongo_portfolio:
-            portfolio_dict[stock['symbol']] = {
-                'shares': stock['shares'],
-                'avg_price': stock['avg_price'],
-                'value': 0  # Will be updated later
-            }
-        st.session_state.portfolio = portfolio_dict
-    else:
-        # If no portfolio found in MongoDB, create one
-        create_portfolio(st.session_state.user_id)
-        st.session_state.portfolio = {}
-
-# Define portfolio value update function
-def update_portfolio_values():
-    """Update portfolio values with current market prices"""
-    total_value = 0
-    for symbol, details in st.session_state.portfolio.items():
-        try:
-            current_price = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
-            details['current_price'] = current_price
-            details['value'] = details['shares'] * current_price
-            details['profit_loss'] = (current_price - details['avg_price']) * details['shares']
-            details['profit_loss_pct'] = (current_price / details['avg_price'] - 1) * 100
-            total_value += details['value']
-        except Exception as e:
-            st.error(f"Error updating {symbol}: {str(e)}")
-            details['current_price'] = 0
-            details['value'] = 0
-            details['profit_loss'] = 0
-            details['profit_loss_pct'] = 0
-    
-    return total_value
 
 
 # Main content area
 with col_main:
-    st.title("🚀 Trading Recommendation System")
+    st.title("🚀 FinnXperts: Financial Trading System")
     
     # Create a dropdown with the ability to select multiple stocks
     available_stocks = ["AAPL", "MSFT", "GOOG", "AMZN", "TSLA", "NFLX", "META", "NVDA", "AMD", "INTC", "PYPL", "DIS", "BA", "JPM", "V", "MA","FORD"]
@@ -133,9 +99,9 @@ with col_main:
                     # Add charts before tabs for better visibility
                     try:
                         # Create price chart
-                        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                        fig = make_subplots(rows=1, cols=1, shared_xaxes=True, 
                                             vertical_spacing=0.03, 
-                                            row_heights=[0.7, 0.3],
+                                            row_heights=[1],
                                             subplot_titles=(f"{symbol} Price", "Volume"))
                         
                         # Add price candlestick
@@ -180,16 +146,7 @@ with col_main:
                                     row=1, col=1
                                 )
                         
-                        # Add volume bar chart
-                        fig.add_trace(
-                            go.Bar(
-                                x=data['stock_data'].index,
-                                y=data['stock_data']['Volume'],
-                                marker_color='rgba(0, 150, 255, 0.6)',
-                                name="Volume"
-                            ),
-                            row=2, col=1
-                        )
+                        
                         
                         # Customize layout
                         fig.update_layout(
@@ -202,7 +159,7 @@ with col_main:
                         
                         # Set y-axes titles
                         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-                        fig.update_yaxes(title_text="Volume", row=2, col=1)
+                        
                         
                         st.plotly_chart(fig, use_container_width=True)
                         
@@ -610,20 +567,7 @@ with col_main:
                                 # Create a more appealing display with columns
                                 col1, col2 = st.columns([1, 3])
                                 
-                                with col1:
-                                    st.markdown(f"<h1 style='text-align: center; font-size: 48px;'>{recommend_icon}</h1>", unsafe_allow_html=True)
                                 
-                                with col2:
-                                    # Display confidence score if available
-                                    if 'confidence_score' in recommendation_result and recommendation_result['confidence_score'] is not None:
-                                        confidence = recommendation_result['confidence_score']
-                                        st.write(f"**Confidence Score:** {confidence:.2f}")
-                                        # Visual confidence meter
-                                        st.progress(confidence)
-                                    else:
-                                        st.write("**Confidence:** Moderate")
-                                        # Default confidence when not available
-                                        st.progress(0.5)
                                 
                                 # Technical analysis reasoning in expandable section
                                 with st.expander("Technical Analysis Details", expanded=True):
@@ -696,86 +640,32 @@ with col_main:
         except Exception as e:
             st.error(f"An error occurred during analysis: {str(e)}")
 
-# Portfolio panel in the sidebar
-st.sidebar.header("📈 Portfolio")
 
-# Update portfolio values
-total_value = update_portfolio_values()
+# Agent Status Section
+st.sidebar.markdown("## 🤖 Agent Status")
 
-# Display total portfolio value
-st.sidebar.metric("Total Portfolio Value", f"${total_value:.2f}")
+# Market Data Agent
+st.sidebar.markdown("### 📊 MarketDataAgent")
+st.sidebar.info(market_data_agent.status)
 
-# Add stock form
-with st.sidebar.expander("Add Stock"):
-    with st.form("add_stock_form"):
-        new_symbol = st.text_input("Symbol").upper()
-        new_shares = st.number_input("Shares", min_value=0.01, step=0.01)
-        new_price = st.number_input("Average Price", min_value=0.01, step=0.01)
-        
-        submit = st.form_submit_button("Add to Portfolio")
-        if submit and new_symbol and new_shares > 0 and new_price > 0:
-            # Use update_portfolio from db.py to update MongoDB
-            update_portfolio(st.session_state.user_id, new_symbol, new_shares, new_price, "buy")
-            
-            # Also update session state for immediate display
-            if new_symbol in st.session_state.portfolio:
-                # Update existing position
-                current = st.session_state.portfolio[new_symbol]
-                total_shares = current['shares'] + new_shares
-                total_cost = (current['shares'] * current['avg_price']) + (new_shares * new_price)
-                new_avg_price = total_cost / total_shares
-                
-                st.session_state.portfolio[new_symbol]['shares'] = total_shares
-                st.session_state.portfolio[new_symbol]['avg_price'] = new_avg_price
-            else:
-                # Add new position
-                st.session_state.portfolio[new_symbol] = {
-                    'shares': new_shares,
-                    'avg_price': new_price,
-                    'value': 0
-                }
-            
-            st.rerun()
+# Technical Analysis Agent
+st.sidebar.markdown("### 🧠 TechnicalAnalysisAgent")
+st.sidebar.info(tech_agent.status)
 
-# Display individual stocks in portfolio
-st.sidebar.markdown("### Holdings")
+# Risk Management Agent
+st.sidebar.markdown("### 🛡️ RiskManagementAgent")
+st.sidebar.info(risk_agent.status)
 
-if len(st.session_state.portfolio) == 0:
-    st.sidebar.info("No stocks in portfolio. Add some stocks to get started!")
+# Execution Agent
+st.sidebar.markdown("### 💼 ExecutionAgent")
+st.sidebar.info(execution_agent.status)
 
-for symbol, details in st.session_state.portfolio.items():
-    if details['shares'] > 0:  # Only show stocks with shares
-        with st.sidebar.expander(f"{symbol} - {details['shares']} shares"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"Avg Price: ${details['avg_price']:.2f}")
-            with col2:
-                if 'current_price' in details and details['current_price'] > 0:
-                    st.write(f"Current: ${details['current_price']:.2f}")
-            
-            # Show profit/loss
-            if 'profit_loss' in details:
-                profit_text = f"P/L: ${details['profit_loss']:.2f} ({details['profit_loss_pct']:.2f}%)"
-                if details['profit_loss'] > 0:
-                    st.success(profit_text)
-                elif details['profit_loss'] < 0:
-                    st.error(profit_text)
-                else:
-                    st.info(profit_text)
-            
-            # Value
-            st.write(f"Value: ${details['value']:.2f}")
-            
-            # Add sell button
-            sell_shares = st.number_input(f"Sell {symbol} shares", min_value=0.01, max_value=float(details['shares']), step=0.01, key=f"sell_{symbol}")
-            if st.button(f"Sell {symbol}", key=f"sell_button_{symbol}"):
-                if sell_shares > 0:
-                    # Use update_portfolio from db.py to update MongoDB
-                    update_portfolio(st.session_state.user_id, symbol, sell_shares, details['current_price'], "sell")
-                    
-                    # Also update session state for immediate display
-                    st.session_state.portfolio[symbol]['shares'] -= sell_shares
-                    if st.session_state.portfolio[symbol]['shares'] <= 0:
-                        del st.session_state.portfolio[symbol]
-                    
-                    st.rerun()
+# Communication Section
+st.sidebar.markdown("## 🔌 Inter-Agent Communication")
+st.sidebar.markdown("### 📡 Message Queue")
+
+if bus.messages:
+    for msg in bus.messages:
+        st.sidebar.json(msg)
+else:
+    st.sidebar.info("No messages in the queue.")
