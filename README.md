@@ -52,3 +52,33 @@ The system consists of four specialized agents that collaborate to analyze stock
 All communication happens via the `AgentCommunicationBus`.
 
 If the **RiskManagementAgent** detects high exposure or unfavorable conditions, it sends a feedback signal to the **ExecutionAgent** to **HOLD** the stock and skip execution.
+
+
+
+### Cloning and Running the App
+
+1. **Clone the repository:**
+   ```bash
+   git clone <https://github.com/prithvia28/TradingRecSys.git>
+   cd <path to your repo>
+   ### Setting Up
+
+2. **Create and activate a virtual environment:**
+
+   ```bash
+   # Create a virtual environment named 'venv'
+   python -m venv venv
+
+   # Activate the virtual environment
+   # On Windows
+   venv\Scripts\activate
+   # On macOS/Linux
+   source venv/bin/activate
+
+3. **Running project**
+
+   ```bash
+   
+   pip install -r requirements.txt
+   streamlit run app.py
+
