@@ -15,8 +15,8 @@ from risk_management import risk_management
 from news_updates import display_news_blocks
 
 # Import agents
+from communication import AgentCommunicationBus
 from agents import (
-    AgentCommunicationBus, 
     MarketDataAgent, 
     TechnicalAnalysisAgent, 
     RiskManagementAgent, 
