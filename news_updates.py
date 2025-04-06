@@ -1,13 +1,19 @@
-# # Use your actual API key here
-# FINNHUB_API_KEY = "cvocq01r01qppf5cab4gcvcocq01r01qppf5cab50"
+
 import requests
 import streamlit as st
 from datetime import datetime, timedelta
 import yfinance as yf
+import os
+
+from dotenv import load_dotenv
+
+# Load variables from .env file
+load_dotenv()
 
 
 # Use your actual API key here
-FINNHUB_API_KEY = "cvonf2hr01qihjtpq20gcvonf2hr01qihjtpq210"
+FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY', '')
+FINNHUB_API_KEY="cvotnk9r01qihjtqu150cvotnk9r01qihjtqu15g"
 # Function to fetch stock-related news from Finnhub
 def fetch_stock_news(symbol):
     today = datetime.today().date()

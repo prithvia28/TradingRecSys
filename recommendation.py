@@ -203,10 +203,10 @@ def generate_ai_recommendation(symbol, price_data, indicators, tech_recommendati
     try:
         # Option 1: Using Google's Gemini API (free tier available)
         # Uncomment and use this section if you prefer Gemini
-        #return generate_gemini_recommendation(symbol, price_data, indicators, tech_recommendation)
+        return generate_gemini_recommendation(symbol, price_data, indicators, tech_recommendation)
         
         # Option 2: Using OpenAI's API (requires API key but has free credits)
-        return generate_openai_recommendation(symbol, price_data, indicators, tech_recommendation)
+        #return generate_openai_recommendation(symbol, price_data, indicators, tech_recommendation)
         
     except Exception as e:
         print(f"Error in AI recommendation: {str(e)}")
@@ -223,8 +223,7 @@ def generate_gemini_recommendation(symbol, price_data, indicators, tech_recommen
     """
     try:
         # Get Gemini API key from environment variable (more secure)
-        # You can set this in your environment or .env file
-        api_key = os.environ.get('GEMINI_API_KEY', '')
+        api_key = os.environ.get('GOOGLE_API_KEY', '')
         
         if not api_key:
             return {
@@ -241,17 +240,44 @@ def generate_gemini_recommendation(symbol, price_data, indicators, tech_recommen
         key_indicators = {}
         for indicator_name in ['RSI', 'MACD', 'SMA 50', 'SMA 200', 'EMA 50']:
             if indicator_name in indicators and indicators[indicator_name] is not None:
-                if hasattr(indicators[indicator_name], 'iloc'):
-                    key_indicators[indicator_name] = float(indicators[indicator_name].iloc[-1]) \
-                        if not pd.isna(indicators[indicator_name].iloc[-1]) else "N/A"
-                else:
-                    key_indicators[indicator_name] = indicators[indicator_name]
+                try:
+                    # Safely extract the last value, handling both Series and other types
+                    if hasattr(indicators[indicator_name], 'iloc'):
+                        # For Series, get the last non-NaN value
+                        indicator_series = indicators[indicator_name].dropna()
+                        if not indicator_series.empty:
+                            value = float(indicator_series.iloc[-1])
+                        else:
+                            value = "N/A"
+                    else:
+                        # If it's not a Series, convert directly
+                        value = float(indicators[indicator_name])
+                    
+                    key_indicators[indicator_name] = value
+                except (TypeError, ValueError, pd.errors.IntCastingNaNError):
+                    # If conversion fails, skip or use "N/A"
+                    key_indicators[indicator_name] = "N/A"
         
         # Add risk metrics
-        if 'volatility' in indicators:
-            key_indicators['volatility'] = indicators['volatility']
-        if 'max_drawdown' in indicators:
-            key_indicators['max_drawdown'] = indicators['max_drawdown']
+        for metric in ['volatility', 'max_drawdown']:
+            if metric in indicators:
+                try:
+                    # Safely convert to float
+                    if hasattr(indicators[metric], 'iloc'):
+                        # For Series, get the last non-NaN value
+                        metric_series = indicators[metric].dropna()
+                        if not metric_series.empty:
+                            value = float(metric_series.iloc[-1])
+                        else:
+                            value = "N/A"
+                    else:
+                        # If it's not a Series, convert directly
+                        value = float(indicators[metric])
+                    
+                    key_indicators[metric] = value
+                except (TypeError, ValueError, pd.errors.IntCastingNaNError):
+                    # If conversion fails, skip or use "N/A"
+                    key_indicators[metric] = "N/A"
         
         # Create prompt for Gemini
         prompt = f"""
@@ -275,7 +301,7 @@ def generate_gemini_recommendation(symbol, price_data, indicators, tech_recommen
         """
         
         # Gemini API endpoint
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-001:generateContent"
         
         # Prepare the request
         payload = {
@@ -340,127 +366,6 @@ def generate_gemini_recommendation(symbol, price_data, indicators, tech_recommen
             
     except Exception as e:
         print(f"Gemini recommendation error: {str(e)}")
-        return {
-            "action": tech_recommendation["action"],
-            "insights": ["Error in AI recommendation process"],
-            "confidence_score": 0.5
-        }
-
-def generate_openai_recommendation(symbol, price_data, indicators, tech_recommendation):
-    """
-    Use OpenAI's API to generate enhanced trading recommendations
-    """
-    try:
-        # Get OpenAI API key from environment variable (more secure)
-        api_key = os.environ.get('OPENAI_API_KEY', '')
-        
-        if not api_key:
-            return {
-                "action": tech_recommendation["action"],
-                "insights": ["OpenAI API key not configured"],
-                "confidence_score": 0.5
-            }
-        
-        # Prepare data for the API request (similar to Gemini function)
-        recent_prices = price_data.tail(5).to_dict('records') if price_data is not None else []
-        
-        # Extract key indicators for the prompt
-        key_indicators = {}
-        for indicator_name in ['RSI', 'MACD', 'SMA 50', 'SMA 200', 'EMA 50']:
-            if indicator_name in indicators and indicators[indicator_name] is not None:
-                if hasattr(indicators[indicator_name], 'iloc'):
-                    key_indicators[indicator_name] = float(indicators[indicator_name].iloc[-1]) \
-                        if not pd.isna(indicators[indicator_name].iloc[-1]) else "N/A"
-                else:
-                    key_indicators[indicator_name] = indicators[indicator_name]
-        
-        # Add risk metrics
-        if 'volatility' in indicators:
-            key_indicators['volatility'] = indicators['volatility']
-        if 'max_drawdown' in indicators:
-            key_indicators['max_drawdown'] = indicators['max_drawdown']
-        
-        # Create prompt for OpenAI
-        prompt = f"""
-        Analyze the trading data for {symbol} and provide a recommendation.
-        
-        Technical indicators:
-        {json.dumps(key_indicators, indent=2)}
-        
-        Recent price action:
-        {json.dumps(recent_prices, indent=2)}
-        
-        Technical analysis recommendation: {tech_recommendation['action']}
-        Technical reasons: {', '.join(tech_recommendation['reasons'])}
-        
-        Based on this data, provide:
-        1. A recommendation (Buy, Sell, or Hold)
-        2. 2-3 key insights about this asset based on the data
-        3. A confidence score between 0 (low confidence) and 1 (high confidence)
-        
-        Format your response as JSON with keys: action, insights (array), confidence_score
-        """
-        
-        # OpenAI API endpoint
-        url = "https://api.openai.com/v1/chat/completions"
-        
-        # Prepare the request
-        payload = {
-            "model": "gpt-3.5-turbo",
-            "messages": [
-                {"role": "system", "content": "You are a financial analysis AI that provides trading recommendations based on technical indicators."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,  # Lower temperature for more consistent responses
-            "max_tokens": 500,
-            "response_format": {"type": "json_object"}
-        }
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        
-        # Make the API request
-        response = requests.post(url, headers=headers, json=payload)
-        response_data = response.json()
-        
-        # Parse the AI response
-        if response.status_code == 200 and 'choices' in response_data:
-            ai_text_response = response_data['choices'][0]['message']['content']
-            
-            try:
-                ai_recommendation = json.loads(ai_text_response.strip())
-                
-                # Ensure all required keys are present
-                if not all(key in ai_recommendation for key in ['action', 'insights', 'confidence_score']):
-                    raise ValueError("Missing required fields in AI response")
-                
-                # Additional validation
-                if ai_recommendation['action'] not in ['Buy', 'Sell', 'Hold']:
-                    ai_recommendation['action'] = tech_recommendation['action']
-                
-                return ai_recommendation
-                
-            except json.JSONDecodeError as e:
-                print(f"JSON parsing error: {str(e)}")
-                # Fall back to technical analysis if JSON parsing fails
-                return {
-                    "action": tech_recommendation["action"],
-                    "insights": ["AI analysis could not be parsed correctly"],
-                    "confidence_score": 0.5
-                }
-        else:
-            print(f"API Error: {response.status_code}")
-            print(response_data)
-            return {
-                "action": tech_recommendation["action"],
-                "insights": ["API error occurred during AI analysis"],
-                "confidence_score": 0.5
-            }
-            
-    except Exception as e:
-        print(f"OpenAI recommendation error: {str(e)}")
         return {
             "action": tech_recommendation["action"],
             "insights": ["Error in AI recommendation process"],

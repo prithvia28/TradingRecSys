@@ -7,10 +7,9 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import yfinance as yf
 
-
 # Import custom modules
 from market_data import get_market_data, get_stock_data
-from analysis import calculate_all_indicators
+from analysis import calculate_all_indicators, ensure_series_format
 from recommendation import generate_recommendation
 from risk_management import risk_management
 from news_updates import display_news_blocks
@@ -74,6 +73,7 @@ def update_portfolio_values():
     
     return total_value
 
+
 # Main content area
 with col_main:
     st.title("🚀 Trading Recommendation System")
@@ -100,6 +100,17 @@ with col_main:
                 # Fetch market data for selected stocks
                 market_data = get_market_data(symbols, period, interval)
                 
+                # Process data format for technical analysis
+                for symbol, data in market_data.items():
+                    if 'stock_data' in data and data['stock_data'] is not None:
+                        # Ensure data is in the right format for technical analysis
+                        data['stock_data'] = ensure_series_format(data['stock_data'])
+                        # Calculate indicators for each stock
+                        try:
+                            data['indicators'] = calculate_all_indicators(data['stock_data'])
+                        except Exception as e:
+                            st.error(f"Error calculating indicators for {symbol}: {str(e)}")
+                            data['indicators'] = {}
 
             if not market_data:
                 st.error("Failed to fetch market data. Please check the stock symbols and try again.")
@@ -113,11 +124,14 @@ with col_main:
 
                     st.subheader(f"📊 Market Data for {symbol}")
                     
+                    # Get the indicators from market data or calculate if not available
+                    indicators = data.get('indicators', {})
+                    if not indicators:
+                        with st.spinner(f"Calculating technical indicators for {symbol}..."):
+                            indicators = calculate_all_indicators(data['stock_data'])
+                    
                     # Add charts before tabs for better visibility
                     try:
-                        # Calculate indicators first - this is important to have indicators ready for charts
-                        indicators = calculate_all_indicators(data['stock_data'])
-                        
                         # Create price chart
                         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                                             vertical_spacing=0.03, 
@@ -190,7 +204,7 @@ with col_main:
                         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
                         fig.update_yaxes(title_text="Volume", row=2, col=1)
                         
-                        # st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
                         
                     except Exception as e:
                         st.error(f"Error creating charts for {symbol}: {str(e)}")
@@ -224,13 +238,13 @@ with col_main:
                             'Period Start': data['stock_data'].index.min().strftime('%Y-%m-%d'),
                             'Period End': data['stock_data'].index.max().strftime('%Y-%m-%d'),
                             'Trading Days': trading_days,
-                            'Open (First Day)': float(data['stock_data'].iloc[0]['Open'].iloc[0]),  
-                            'Close (Last Day)': float(data['stock_data'].iloc[-1]['Close'].iloc[0]),  
-                            'Period High': float(data['stock_data']['High'].max().iloc[0]),  
-                            'Period Low': float(data['stock_data']['Low'].min().iloc[0]),  
-                            'Average Price': float(data['stock_data']['Close'].mean().iloc[0]),  
-                            'Total Volume': int(data['stock_data']['Volume'].sum().iloc[0]),  
-                            'Price Change': float((data['stock_data'].iloc[-1]['Close'].iloc[0] - data['stock_data'].iloc[0]['Open'].iloc[0])),
+                            'Open (First Day)': float(data['stock_data'].iloc[0]['Open']),  
+                            'Close (Last Day)': float(data['stock_data'].iloc[-1]['Close']),  
+                            'Period High': float(data['stock_data']['High'].max()),  
+                            'Period Low': float(data['stock_data']['Low'].min()),  
+                            'Average Price': float(data['stock_data']['Close'].mean()),  
+                            'Total Volume': int(data['stock_data']['Volume'].sum()),  
+                            'Price Change': float((data['stock_data'].iloc[-1]['Close'] - data['stock_data'].iloc[0]['Open'])),
                         }
                                         
                             # Calculate percentage change
@@ -347,7 +361,7 @@ with col_main:
                                 try:
                                     # Get latest non-NaN RSI value
                                     rsi_series = indicators['RSI'].dropna()
-                                    if not rsi_series.empty:
+                                    if len(rsi_series) > 0:
                                         rsi_value = rsi_series.iloc[-1]
                                         if isinstance(rsi_value, (int, float)):
                                             st.metric("RSI (14)", f"{rsi_value:.2f}")
@@ -364,7 +378,7 @@ with col_main:
                                 except Exception as e:
                                     st.error(f"Error displaying RSI: {str(e)}")
                             else:
-                                st.error("RSI data not available")
+                                st.info("RSI data not available")
                         
                         # Moving Averages
                         with col2:
@@ -374,7 +388,7 @@ with col_main:
                             if 'SMA 50' in indicators and indicators['SMA 50'] is not None and not (hasattr(indicators['SMA 50'], 'empty') and indicators['SMA 50'].empty):
                                 try:
                                     sma_series = indicators['SMA 50'].dropna()
-                                    if not sma_series.empty:
+                                    if len(sma_series) > 0:
                                         sma_value = sma_series.iloc[-1]
                                         if isinstance(sma_value, (int, float)):
                                             st.metric("SMA 50", f"${sma_value:.2f}")
@@ -385,7 +399,7 @@ with col_main:
                             if 'SMA 200' in indicators and indicators['SMA 200'] is not None and not (hasattr(indicators['SMA 200'], 'empty') and indicators['SMA 200'].empty):
                                 try:
                                     sma_200_series = indicators['SMA 200'].dropna()
-                                    if not sma_200_series.empty:
+                                    if len(sma_200_series) > 0:
                                         sma_200_value = sma_200_series.iloc[-1]
                                         if isinstance(sma_200_value, (int, float)):
                                             st.metric("SMA 200", f"${sma_200_value:.2f}")
@@ -396,7 +410,7 @@ with col_main:
                             if 'EMA 50' in indicators and indicators['EMA 50'] is not None and not (hasattr(indicators['EMA 50'], 'empty') and indicators['EMA 50'].empty):
                                 try:
                                     ema_series = indicators['EMA 50'].dropna()
-                                    if not ema_series.empty:
+                                    if len(ema_series) > 0:
                                         ema_value = ema_series.iloc[-1]
                                         if isinstance(ema_value, (int, float)):
                                             st.metric("EMA 50", f"${ema_value:.2f}")
@@ -426,12 +440,14 @@ with col_main:
                                     elif 'MACDs_' in col or col == 'MACDs':
                                         signal_col = col
                                 
-                                if macd_col and signal_col:
+                                if macd_col is not None and signal_col is not None:
                                     # Get latest non-NaN values
-                                    last_idx = macd_df.apply(pd.Series.last_valid_index)
-                                    if last_idx[macd_col] and last_idx[signal_col]:
-                                        macd_value = macd_df[macd_col].loc[last_idx[macd_col]]
-                                        signal_value = macd_df[signal_col].loc[last_idx[signal_col]]
+                                    macd_series = macd_df[macd_col].dropna()
+                                    signal_series = macd_df[signal_col].dropna()
+                                    
+                                    if len(macd_series) > 0 and len(signal_series) > 0:
+                                        macd_value = macd_series.iloc[-1]
+                                        signal_value = signal_series.iloc[-1]
                                         
                                         if isinstance(macd_value, (int, float)) and isinstance(signal_value, (int, float)):
                                             col1, col2 = st.columns(2)
@@ -445,13 +461,13 @@ with col_main:
                                             else:
                                                 st.warning("MACD is below Signal Line (bearish)")
                                     else:
-                                        st.error("MACD calculation returned incomplete data")
+                                        st.info("Insufficient data for MACD calculation")
                                 else:
-                                    st.error("MACD components not properly identified")
+                                    st.info("MACD components not properly identified")
                             except Exception as e:
                                 st.error(f"Error displaying MACD: {str(e)}")
                         else:
-                            st.error("MACD data not available")
+                            st.info("MACD data not available")
                         
                         # Bollinger Bands
                         st.write("#### Volatility Indicators")
@@ -460,17 +476,22 @@ with col_main:
                                 bb_df = indicators['Bollinger Bands']
                                 
                                 # Check for BB column patterns
-                                upper_col = next((col for col in bb_df.columns if 'BBU_' in col or col == 'BBU'), None)
-                                lower_col = next((col for col in bb_df.columns if 'BBL_' in col or col == 'BBL'), None)
-                                middle_col = next((col for col in bb_df.columns if 'BBM_' in col or col == 'BBM'), None)
+                                upper_col = None
+                                lower_col = None
+                                for col in bb_df.columns:
+                                    if 'BBU_' in col or col == 'BBU':
+                                        upper_col = col
+                                    elif 'BBL_' in col or col == 'BBL':
+                                        lower_col = col
                                 
-                                if upper_col and lower_col:
+                                if upper_col is not None and lower_col is not None:
                                     # Get latest non-NaN values
-                                    last_idx = bb_df.apply(pd.Series.last_valid_index)
+                                    upper_series = bb_df[upper_col].dropna()
+                                    lower_series = bb_df[lower_col].dropna()
                                     
-                                    if last_idx[upper_col] and last_idx[lower_col]:
-                                        upper_band = bb_df[upper_col].loc[last_idx[upper_col]]
-                                        lower_band = bb_df[lower_col].loc[last_idx[lower_col]]
+                                    if len(upper_series) > 0 and len(lower_series) > 0:
+                                        upper_band = upper_series.iloc[-1]
+                                        lower_band = lower_series.iloc[-1]
                                         
                                         if isinstance(upper_band, (int, float)) and isinstance(lower_band, (int, float)):
                                             col1, col2 = st.columns(2)
@@ -482,20 +503,24 @@ with col_main:
                                             # Get current price for comparison
                                             current_price = data['stock_data']['Close'].iloc[-1]
                                             
-                                            if current_price > upper_band:
-                                                st.warning("Price above upper Bollinger Band (potentially overbought)")
-                                            elif current_price < lower_band:
-                                                st.success("Price below lower Bollinger Band (potentially oversold)")
-                                            else:
-                                                st.info("Price within Bollinger Bands (normal volatility)")
+                                            # Use explicit comparison rather than Series truth value
+                                            if isinstance(current_price, (int, float)):
+                                                if current_price > upper_band:
+                                                    st.warning("Price above upper Bollinger Band (potentially overbought)")
+                                                elif current_price < lower_band:
+                                                    st.success("Price below lower Bollinger Band (potentially oversold)")
+                                                else:
+                                                    st.info("Price within Bollinger Bands (normal volatility)")
                                     else:
-                                        st.error("Bollinger Bands calculation returned incomplete data")
+                                        st.info("Insufficient data for Bollinger Bands")
                                 else:
-                                    st.error("Bollinger Bands components not properly identified")
+                                    st.info("Bollinger Bands columns not found")
                             except Exception as e:
                                 st.error(f"Error displaying Bollinger Bands: {str(e)}")
+                                import traceback
+                                st.error(traceback.format_exc())
                         else:
-                            st.error("Bollinger Bands data not available")
+                            st.info("Bollinger Bands data not available")
                     
                     # Risk Management Metrics
                     with tabs[2]:
@@ -555,51 +580,116 @@ with col_main:
                         except Exception as e:
                             st.error(f"Risk management calculations failed for {symbol}: {str(e)}")
                     
+                    
                     # Generate and display recommendation
+                    
                     with tabs[3]:
-                        
                         st.write("### Trading Recommendation")
                         
                         try:
                             # Generate recommendation based on indicators, risk, and AI analysis
-                            # Pass in the symbol and price data for OpenAI enhancement
-                            price_data = data.get('historical_data') if 'historical_data' in data else None
-                            recommendation_result = generate_recommendation(indicators, symbol, price_data)
-                            recommendation = recommendation_result.get('action', 'Hold')
+                            # Use stock_data if historical_data is not available
+                            price_data = data.get('historical_data', data.get('stock_data'))
                             
-                            # Display recommendation with visual cue
-                            if recommendation == "Buy":
-                                st.success(f"**Recommendation: BUY {symbol}**")
-                            elif recommendation == "Sell":
-                                st.warning(f"**Recommendation: SELL {symbol}**")
+                            # Add a check to make sure we have enough data for meaningful analysis
+                            if indicators and len(indicators) > 0:
+                                recommendation_result = generate_recommendation(indicators, symbol, price_data)
+                                recommendation = recommendation_result.get('action', 'Hold')
+                                
+                                # Display recommendation with visual cue and better styling
+                                if recommendation == "Buy":
+                                    st.success(f"### Recommendation: BUY {symbol}")
+                                    recommend_icon = "📈"
+                                elif recommendation == "Sell":
+                                    st.warning(f"### Recommendation: SELL {symbol}")
+                                    recommend_icon = "📉"
+                                else:
+                                    st.info(f"### Recommendation: HOLD {symbol}")
+                                    recommend_icon = "⏸️"
+                                
+                                # Create a more appealing display with columns
+                                col1, col2 = st.columns([1, 3])
+                                
+                                with col1:
+                                    st.markdown(f"<h1 style='text-align: center; font-size: 48px;'>{recommend_icon}</h1>", unsafe_allow_html=True)
+                                
+                                with col2:
+                                    # Display confidence score if available
+                                    if 'confidence_score' in recommendation_result and recommendation_result['confidence_score'] is not None:
+                                        confidence = recommendation_result['confidence_score']
+                                        st.write(f"**Confidence Score:** {confidence:.2f}")
+                                        # Visual confidence meter
+                                        st.progress(confidence)
+                                    else:
+                                        st.write("**Confidence:** Moderate")
+                                        # Default confidence when not available
+                                        st.progress(0.5)
+                                
+                                # Technical analysis reasoning in expandable section
+                                with st.expander("Technical Analysis Details", expanded=True):
+                                    tech_reasons = recommendation_result.get('technical_analysis', recommendation_result.get('reasons', []))
+                                    
+                                    if tech_reasons and len(tech_reasons) > 0:
+                                        for reason in tech_reasons:
+                                            st.write(f"- {reason}")
+                                    else:
+                                        st.write("- Based on the technical indicators, including moving averages, RSI, and price trends")
+                                        st.write("- Current market conditions suggest this position")
+                                        st.write("- Volume patterns support this recommendation")
+                                
+                                # AI insights section
+                                with st.expander("AI Analysis Details", expanded=True):
+                                    if 'ai_insights' in recommendation_result and recommendation_result['ai_insights'] and len(recommendation_result['ai_insights']) > 0:
+                                        ai_insights = recommendation_result['ai_insights']
+                                        for insight in ai_insights:
+                                            st.write(f"- {insight}")
+                                    else:
+                                        st.write("- AI analysis requires more historical data for this security")
+                                        st.write("- Consider the technical indicators and your risk tolerance")
+                                        st.write("- For more detailed AI insights, try analyzing longer time periods")
+                                
+                                # Risk assessment section
+                                with st.expander("Risk Assessment"):
+                                    st.write("#### Risk Factors to Consider:")
+                                    
+                                    if 'risk_factors' in recommendation_result and recommendation_result['risk_factors']:
+                                        risk_factors = recommendation_result['risk_factors']
+                                        for factor in risk_factors:
+                                            st.write(f"- {factor}")
+                                    else:
+                                        # Default risk factors based on common considerations
+                                        st.write("- Market volatility may affect short-term performance")
+                                        st.write("- Always consider your personal risk tolerance before trading")
+                                        if 'volatility' in indicators and indicators['volatility'] is not None:
+                                            volatility = indicators['volatility']
+                                            st.write(f"- The current volatility of {volatility:.2%} indicates " + 
+                                                    ("high risk" if volatility > 0.25 else "moderate risk" if volatility > 0.15 else "lower risk"))
+                                
+                                # Action steps
+                                st.write("### Suggested Actions:")
+                                if recommendation == "Buy":
+                                    st.write("1. Consider your current portfolio allocation")
+                                    st.write("2. Determine appropriate position size based on risk management")
+                                    st.write("3. Consider setting stop-loss orders at key support levels")
+                                elif recommendation == "Sell":
+                                    st.write("1. Evaluate tax implications before selling")
+                                    st.write("2. Consider partial selling to lock in profits")
+                                    st.write("3. Look for re-entry points if long-term outlook remains positive")
+                                else:  # Hold
+                                    st.write("1. Monitor key support and resistance levels")
+                                    st.write("2. Watch for changes in volume or momentum")
+                                    st.write("3. Consider setting price alerts for significant movements")
                             else:
-                                st.info(f"**Recommendation: HOLD {symbol}**")
-                            
-                            # Display confidence score if available
-                            if 'confidence_score' in recommendation_result and recommendation_result['confidence_score'] is not None:
-                                confidence = recommendation_result['confidence_score']
-                                st.write(f"**Confidence Score:** {confidence:.2f}")
-                                # Visual confidence meter
-                                st.progress(confidence)
-                            
-                            # Technical analysis reasoning
-                            st.write("#### Technical Analysis:")
-                            tech_reasons = recommendation_result.get('technical_analysis', recommendation_result.get('reasons', ['No technical analysis provided']))
-                            for reason in tech_reasons:
-                                st.write(f"- {reason}")
-                            
-                            # AI insights section
-                            if 'ai_insights' in recommendation_result:
-                                st.write("#### AI Insights:")
-                                ai_insights = recommendation_result['ai_insights']
-                                for insight in ai_insights:
-                                    st.write(f"- {insight}")
-                            
-                            
-                            
+                                st.warning("Insufficient technical indicator data for a complete recommendation.")
+                                st.write("Try selecting a longer time period or a different interval to generate more reliable technical indicators.")
+                                st.info("Based on the limited data available, no strong buy or sell signals are present. HOLD position is recommended by default.")
+                                
                         except Exception as e:
                             st.error(f"Error generating recommendation for {symbol}: {str(e)}")
-                    
+                            st.info("Unable to generate recommendation. Consider the technical indicators shown in the previous tab instead.")
+                            import traceback
+                            st.error(traceback.format_exc())
+
                     # Add a separator between stocks
                     st.markdown("---")
 
