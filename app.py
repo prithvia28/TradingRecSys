@@ -30,7 +30,14 @@ tech_agent = TechnicalAnalysisAgent(bus)
 execution_agent = ExecutionAgent(bus)
 risk_agent = RiskManagementAgent(bus)
 
-
+# Import functions from your db.py file
+from db import (
+    get_portfolio,
+    create_portfolio,
+    update_portfolio,
+    load_portfolio_from_mongo,
+    save_portfolio_to_mongo
+)
 
 # Page configuration
 st.set_page_config(layout="wide", page_title="FinnXperts")
@@ -38,6 +45,49 @@ st.set_page_config(layout="wide", page_title="FinnXperts")
 # Create a three-column layout for the main content area
 col_main, col_news = st.columns([2, 1])
 
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = "default_user"  # Use a default user for demo
+
+# Initialize session state for portfolio if it doesn't exist
+if 'portfolio' not in st.session_state:
+    # Try to load from MongoDB
+    mongo_portfolio = load_portfolio_from_mongo(st.session_state.user_id)
+    
+    if mongo_portfolio:
+        # Convert MongoDB portfolio format to session state format
+        portfolio_dict = {}
+        for stock in mongo_portfolio:
+            portfolio_dict[stock['symbol']] = {
+                'shares': stock['shares'],
+                'avg_price': stock['avg_price'],
+                'value': 0  # Will be updated later
+            }
+        st.session_state.portfolio = portfolio_dict
+    else:
+        # If no portfolio found in MongoDB, create one
+        create_portfolio(st.session_state.user_id)
+        st.session_state.portfolio = {}
+
+# Define portfolio value update function
+def update_portfolio_values():
+    """Update portfolio values with current market prices"""
+    total_value = 0
+    for symbol, details in st.session_state.portfolio.items():
+        try:
+            current_price = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
+            details['current_price'] = current_price
+            details['value'] = details['shares'] * current_price
+            details['profit_loss'] = (current_price - details['avg_price']) * details['shares']
+            details['profit_loss_pct'] = (current_price / details['avg_price'] - 1) * 100
+            total_value += details['value']
+        except Exception as e:
+            st.error(f"Error updating {symbol}: {str(e)}")
+            details['current_price'] = 0
+            details['value'] = 0
+            details['profit_loss'] = 0
+            details['profit_loss_pct'] = 0
+    
+    return total_value
 
 
 # Main content area
