@@ -13,7 +13,7 @@ from analysis import calculate_all_indicators, ensure_series_format
 from recommendation import generate_recommendation
 from risk_management import risk_management
 from news_updates import display_news_blocks
-
+from chatbot import minimizable_trading_chatbot
 # Import agents
 from communication import AgentCommunicationBus
 from agents import (
@@ -95,7 +95,7 @@ with col_main:
     st.title("🚀 FinnXperts: Financial Trading System")
     
     # Create a dropdown with the ability to select multiple stocks
-    available_stocks = ["AAPL", "MSFT", "GOOG", "AMZN", "TSLA", "NFLX", "META", "NVDA", "AMD", "INTC", "PYPL", "DIS", "BA", "JPM", "V", "MA","FORD"]
+    available_stocks = ["AAPL", "MSFT", "GOOG", "AMZN", "TSLA", "NFLX", "META", "NVDA", "AMD", "INTC", "PYPL", "DIS", "BA", "JPM", "V", "MA","FORD","IBP","ANF"]
     symbols = st.multiselect("Select Stock Symbols", available_stocks, default=["AAPL"])
     
     
@@ -111,6 +111,19 @@ with col_main:
             period = "1mo"
 
     if st.button("Analyze Stocks"):
+        if 'last_analyzed_symbols' not in st.session_state or st.session_state.last_analyzed_symbols != symbols:
+            if 'bus' in st.session_state:
+                # Clear messages
+                st.session_state.bus.messages = []
+                
+                # Reset agent statuses
+                st.session_state.market_data_agent.status = "Waiting for data request"
+                st.session_state.tech_agent.status = "Ready for market analysis"
+                st.session_state.risk_agent.status = "Monitoring risk levels"
+                st.session_state.execution_agent.status = "Awaiting trade execution instructions"
+            
+            # Store the current symbols
+            st.session_state.last_analyzed_symbols = symbols.copy()
         try:
             with st.spinner("Fetching market data..."):
                 # Fetch market data for selected stocks
@@ -230,7 +243,7 @@ with col_main:
                     with tabs[0]:  # Price Data tab
                         st.write("### Price Data Summary")
                         
-                        # Calculate proper trading days based on interval
+                        # Calculate proper tracding days based on interval
                         if interval in ["1d", "1wk", "1mo"]:
                             # When using daily or longer intervals, each row is a trading day
                             trading_days = len(data['stock_data'])
@@ -686,6 +699,101 @@ with col_main:
 
                     # Add a separator between stocks
                     st.markdown("---")
+            # Initialize agents if not already in session state
+                if 'bus' not in st.session_state:
+                    bus = AgentCommunicationBus()
+                    market_data_agent = MarketDataAgent(bus)
+                    tech_agent = TechnicalAnalysisAgent(bus)
+                    risk_agent = RiskManagementAgent(bus)
+                    execution_agent = ExecutionAgent(bus)
+                    
+                    st.session_state.bus = bus
+                    st.session_state.market_data_agent = market_data_agent
+                    st.session_state.tech_agent = tech_agent
+                    st.session_state.risk_agent = risk_agent
+                    st.session_state.execution_agent = execution_agent
+                else:
+                    bus = st.session_state.bus
+                    market_data_agent = st.session_state.market_data_agent
+                    tech_agent = st.session_state.tech_agent
+                    risk_agent = st.session_state.risk_agent
+                    execution_agent = st.session_state.execution_agent
+
+                # After successful analysis, update agent statuses and add messages
+                if not st.session_state.bus.messages:  # Only add if no messages yet
+                    # First, add messages for the overall process
+                    market_data_agent.send_message(
+                        "TechnicalAnalysisAgent", 
+                        "data_ready", 
+                        f"Market data ready for {', '.join(symbols)}"
+                    )
+                    
+                    tech_agent.send_message(
+                        "RiskManagementAgent", 
+                        "analysis_complete", 
+                        f"Technical indicators calculated for all symbols"
+                    )
+                    
+                    risk_agent.send_message(
+                        "ExecutionAgent", 
+                        "risk_ready", 
+                        f"Risk metrics calculated for all symbols"
+                    )
+                    
+                    # Then show status updates for all symbols that were analyzed
+                    analyzed_symbols = []
+                    for symbol in symbols:
+                        if symbol in market_data and 'stock_data' in market_data[symbol]:
+                            analyzed_symbols.append(symbol)
+                    
+                    if analyzed_symbols:
+                        # Update final status to show all symbols that were successfully analyzed
+                        market_data_agent.update_status(f"Data collection complete for {', '.join(analyzed_symbols)}")
+                        tech_agent.update_status(f"Technical analysis complete for {', '.join(analyzed_symbols)}")
+                        risk_agent.update_status(f"Risk assessment complete for {', '.join(analyzed_symbols)}")
+                        execution_agent.update_status(f"Recommendations generated for {', '.join(analyzed_symbols)}")
+                        
+                        # Send final summary message
+                        execution_agent.send_message(
+                            "all", 
+                            "recommendations_ready", 
+                            f"Trading recommendations ready for {', '.join(analyzed_symbols)}: {recommendation}"
+                        )
+                    
+                    # Demonstrate agent correction based on risk feedback
+                    risk_feedback_shown = False
+                    for symbol in symbols:
+                        if symbol in market_data and 'indicators' in market_data[symbol]:
+                            indicators = market_data[symbol]['indicators']
+                            # Check for high risk level
+                            if 'risk_level' in indicators and indicators['risk_level'] in ["Very High"]:
+                                risk_agent.send_message(
+                                    "ExecutionAgent",
+                                    "risk_warning",
+                                    f"Warning: {indicators['risk_level']} risk detected for {symbol}, consider adjusting recommendation"
+                                )
+                                execution_agent.update_status(f"Adjusting recommendation based on risk feedback for {symbol}")
+                                execution_agent.send_message(
+                                    "all",
+                                    "recommendation_adjusted",
+                                    f"Adjusted recommendation for {symbol}: HOLD due to very high risk."
+                                )
+                                risk_feedback_shown = True
+                                break  # Just do one example for demonstration
+                    
+                    # If no high risk found, still show an interaction for demonstration
+                    if not risk_feedback_shown and analyzed_symbols:
+                        example_symbol = analyzed_symbols[0]
+                        risk_agent.send_message(
+                            "ExecutionAgent",
+                            "risk_confirmation",
+                            f"Risk levels acceptable for {example_symbol}, no adjustment needed"
+                        )
+                        execution_agent.send_message(
+                            "all",
+                            "recommendation_confirmed",
+                            f"Confirmed recommendation for {example_symbol} without changes"
+                        )
 
         except Exception as e:
             st.error(f"An error occurred during analysis: {str(e)}")
@@ -694,28 +802,103 @@ with col_main:
 # Agent Status Section
 st.sidebar.markdown("## 🤖 Agent Status")
 
-# Market Data Agent
-st.sidebar.markdown("### 📊 MarketDataAgent")
-st.sidebar.info(market_data_agent.status)
+# Get agents from session state if available
+market_data_agent = st.session_state.get('market_data_agent', None)
+tech_agent = st.session_state.get('tech_agent', None)
+risk_agent = st.session_state.get('risk_agent', None)
+execution_agent = st.session_state.get('execution_agent', None)
 
-# Technical Analysis Agent
-st.sidebar.markdown("### 🧠 TechnicalAnalysisAgent")
-st.sidebar.info(tech_agent.status)
+# Display each agent status if available
+if market_data_agent:
+    st.sidebar.markdown("### 📊 MarketDataAgent")
+    if "complete" in market_data_agent.status.lower():
+        st.sidebar.success(market_data_agent.status)
+    else:
+        st.sidebar.info(market_data_agent.status)
+    st.sidebar.caption(f"Last updated: {market_data_agent.latest_update}")
 
-# Risk Management Agent
-st.sidebar.markdown("### 🛡️ RiskManagementAgent")
-st.sidebar.info(risk_agent.status)
+if tech_agent:
+    st.sidebar.markdown("### 🧠 TechnicalAnalysisAgent")
+    if "complete" in tech_agent.status.lower():
+        st.sidebar.success(tech_agent.status)
+    else:
+        st.sidebar.info(tech_agent.status)
+    st.sidebar.caption(f"Last updated: {tech_agent.latest_update}")
 
-# Execution Agent
-st.sidebar.markdown("### 💼 ExecutionAgent")
-st.sidebar.info(execution_agent.status)
+if risk_agent:
+    st.sidebar.markdown("### 🛡️ RiskManagementAgent")
+    if "complete" in risk_agent.status.lower():
+        st.sidebar.success(risk_agent.status)
+    else:
+        st.sidebar.info(risk_agent.status)
+    st.sidebar.caption(f"Last updated: {risk_agent.latest_update}")
 
-# Communication Section
+if execution_agent:
+    st.sidebar.markdown("### 💼 ExecutionAgent")
+    if "complete" in execution_agent.status.lower():
+        st.sidebar.success(execution_agent.status)
+    else:
+        st.sidebar.info(execution_agent.status)
+    st.sidebar.caption(f"Last updated: {execution_agent.latest_update}")
+
+# Agent Communication display with better styling
 st.sidebar.markdown("## 🔌 Inter-Agent Communication")
-st.sidebar.markdown("### 📡 Message Queue")
 
-if bus.messages:
-    for msg in bus.messages:
-        st.sidebar.json(msg)
+# Get bus from session state if available
+bus = st.session_state.get('bus', None)
+if bus and hasattr(bus, 'messages'):
+    messages = bus.messages
+    if messages:
+        # Sort messages by timestamp (assuming messages have timestamps)
+        sorted_messages = sorted(messages, key=lambda x: x.get('timestamp', '00:00:00'))
+        
+        # Display messages in a more visually appealing way
+        for i, msg in enumerate(sorted_messages[-5:]):  # Show last 5 messages
+            sender = msg.get('sender', 'Unknown')
+            recipient = msg.get('recipient', 'Unknown')
+            content = msg.get('content', '')
+            timestamp = msg.get('timestamp', 'Unknown time')
+            
+            # Choose color based on sender
+            if "Market" in sender:
+                emoji = "📊"
+                color = "#4CAF50"  # Green
+            elif "Technical" in sender:
+                emoji = "🧠"
+                color = "#2196F3"  # Blue
+            elif "Risk" in sender:
+                emoji = "🛡️"
+                color = "#FF9800"  # Orange
+            elif "Execution" in sender:
+                emoji = "💼"
+                color = "#9C27B0"  # Purple
+            else:
+                emoji = "🤖"
+                color = "#607D8B"  # Gray
+            
+            # Create a styled message card
+            st.sidebar.markdown(f"""
+            <div style="
+                border-left: 3px solid {color};
+                padding-left: 10px;
+                margin-bottom: 8px;
+                background-color: rgba(0,0,0,0.05);
+                border-radius: 4px;
+                padding: 8px;">
+                <div style="font-size: 0.9em; margin-bottom: 4px;">
+                    <span style="color: {color};">{emoji} {sender}</span> → {recipient}
+                </div>
+                <div style="font-size: 0.8em; margin-bottom: 4px;">
+                    {content}
+                </div>
+                <div style="font-size: 0.7em; opacity: 0.7;">
+                    {timestamp}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.sidebar.info("No messages in the queue.")
 else:
-    st.sidebar.info("No messages in the queue.")
+    st.sidebar.info("No agent communication available.")
+   
+# minimizable_trading_chatbot() 
