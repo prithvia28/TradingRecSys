@@ -233,6 +233,7 @@ with col_main:
 
 
                     with col_news:
+                        
                         st.write(f"📰 Latest News for {symbol}")
                         display_news_blocks(symbol)
 
@@ -801,6 +802,7 @@ with col_main:
 
 # Agent Status Section
 st.sidebar.markdown("## 🤖 Agent Status")
+ 
 
 # Get agents from session state if available
 market_data_agent = st.session_state.get('market_data_agent', None)
@@ -896,9 +898,11 @@ if bus and hasattr(bus, 'messages'):
                 </div>
             </div>
             """, unsafe_allow_html=True)
+              
     else:
         st.sidebar.info("No messages in the queue.")
+   
 else:
     st.sidebar.info("No agent communication available.")
-   
-# minimizable_trading_chatbot() 
+    
+minimizable_trading_chatbot()  
