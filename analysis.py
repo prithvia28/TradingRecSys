@@ -118,7 +118,7 @@ def calculate_all_indicators(data):
     # Ensure data is in the correct format first
     data = ensure_series_format(data)
     
-    # Debug prints to help diagnose issues
+    # debug prints
     print(f"Data columns: {data.columns}")
     print(f"Data shape: {data.shape}")
     print(f"First 3 rows: {data.head(3)}")
@@ -160,7 +160,7 @@ def calculate_all_indicators(data):
     except Exception as e:
         print(f"Bollinger Bands calculation failed: {e}")
     
-    # Add returns calculation for risk management
+    # Return and risk calculation
     if 'Returns' not in data.columns:
         try:
             data['Returns'] = data['Close'].pct_change()
