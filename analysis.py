@@ -115,7 +115,7 @@ def calculate_all_indicators(data):
         print("No data provided to calculate_all_indicators")
         return {}
     
-    # Ensure data is in the correct format first
+    # Ensuring data is in the correct format first
     data = ensure_series_format(data)
     
     # debug prints
