@@ -64,10 +64,10 @@ def get_market_data(symbols=["AAPL"], period="1y", interval="1d"):
             low_price = stock_data['Low'].min()
             average_price = stock_data['Close'].mean()
 
-            # Get real-time price
+            # To get real time price
             real_time_price = get_real_time_price(symbol)
 
-            # Add stock data and trends to dictionary
+            # Adding stock data & trends to dictionary
             market_data[symbol] = {
                 "stock_data": stock_data,  # Keep all data for calculations
                 "high_price": high_price,

@@ -14,7 +14,7 @@ from recommendation import generate_recommendation
 from risk_management import risk_management
 from news_updates import display_news_blocks
 from chatbot import minimizable_trading_chatbot
-# Import agents
+# Importing agents
 from communication import AgentCommunicationBus
 from agents import (
     MarketDataAgent, 
@@ -23,7 +23,7 @@ from agents import (
     ExecutionAgent
 )
 
-# Initialize agents
+# Initializing agents
 bus = AgentCommunicationBus()
 market_data_agent = MarketDataAgent(bus)
 tech_agent = TechnicalAnalysisAgent(bus)
@@ -52,7 +52,6 @@ if 'user_id' not in st.session_state:
 if 'portfolio' not in st.session_state:
     # Try to load from MongoDB
     mongo_portfolio = load_portfolio_from_mongo(st.session_state.user_id)
-    
     if mongo_portfolio:
         # Convert MongoDB portfolio format to session state format
         portfolio_dict = {}
